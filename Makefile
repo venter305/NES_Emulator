@@ -34,6 +34,7 @@ obj/%.o: ./Mappers%.h
 init:
 	mkdir -p obj obj/GUI obj/Mappers
 	mkdir -p SaveStates
+	mkdir -p Saves/
 
 clean:
 	rm -f ./obj/*.o ./obj/GUI/*.o ./obj/Mappers/*.o emu

@@ -31,6 +31,10 @@ obj/%.o: ./Mappers/%.cpp
 obj/%.o: ./Mappers%.h
 	g++ -c -o $@ $< -I /usr/include/freetype2
 
+init:
+	mkdir -p obj obj/GUI obj/Mappers
+	mkdir -p SaveStates
+
 clean:
 	rm -f ./obj/*.o ./obj/GUI/*.o ./obj/Mappers/*.o emu
 

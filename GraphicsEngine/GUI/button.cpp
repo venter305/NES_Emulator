@@ -3,14 +3,20 @@
 
 using namespace std;
 
-Button::Button(int x,int y, int w, int h, void (*action_func)(Button*),string vsName, string fsName): Panel(x,y,w,h,vsName,fsName){
+Button::Button(int x,int y, int w, int h, void (*action_func)(Button*),string vsName, string fsName): Button(x,y,w,h,action_func,NULL){
+}
+
+Button::Button(int x,int y, int w, int h, void (*action_func)(Button*),GLFWwindow *window,string vsName, string fsName): Panel(x,y,w,h,window,vsName,fsName){
 	color[0] = 1;
 	color[1] = 1;
 	color[2] = 1;
-	//GLuint textFbo;
+	
+	GLFWwindow *currWindow = glfwGetCurrentContext();
+	glfwMakeContextCurrent(context);
+
+	//Init texture
 	glGenFramebuffers(1,&textFbo);
 	glBindFramebuffer(GL_FRAMEBUFFER,textFbo);
-	//GLuint textTexture;
 	glGenTextures(1,&textTexture);
 	glBindTexture(GL_TEXTURE_2D,textTexture);
 	glTexImage2D(GL_TEXTURE_2D,0,GL_RGB,w,h,0,GL_RGB,GL_UNSIGNED_BYTE,NULL);
@@ -21,13 +27,13 @@ Button::Button(int x,int y, int w, int h, void (*action_func)(Button*),string vs
 
 	int currViewport[4];
 	glGetIntegerv(GL_VIEWPORT,currViewport);
-	glViewport(0,0,w,h);
-
+	
+	//Background
 	glColor3f(1,1,1);
-	glRectf(-1,-1,1,1);
-
+	glRecti(0,0,width,height);
+	
+	//Text
 	text = new Text(0,0,12,"Button", "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf");
-	text->flipY();
 	text->draw();
 
 	glBindFramebuffer(GL_FRAMEBUFFER,0);	
@@ -36,19 +42,22 @@ Button::Button(int x,int y, int w, int h, void (*action_func)(Button*),string vs
 
 	tex = textTexture;
 	action = action_func;
+	
+	glfwMakeContextCurrent(currWindow);
 }
 
+//Render the text
 void Button::drawText(){
 	
 	glBindFramebuffer(GL_FRAMEBUFFER,textFbo);
 	int currViewport[4];
 	glGetIntegerv(GL_VIEWPORT,currViewport);
-	glViewport(0,0,width,height);
-
+	
+	//Background
 	glColor3f(color[0],color[1],color[2]);
-	glRectf(-1,-1,1,1);
+	glRecti(0,0,width,height);
+	//Text
 	text->drawText();
-	text->flipY();
 	text->draw();
 
 	glBindFramebuffer(GL_FRAMEBUFFER,0);	
@@ -58,6 +67,7 @@ void Button::drawText(){
 	tex = textTexture;
 }
 
+//Change Background color
 void Button::setBackgroundColor(float c1,float c2,float c3){
 	color[0] = c1;
 	color[1] = c2;

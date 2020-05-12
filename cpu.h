@@ -11,17 +11,24 @@ class cpu{
 		int (cpu::*addrMode)();
 		int cycles;
 	};
+	
+	
+	uint8_t	P_CARRY =  0b00000001,
+					P_ZERO =   0b00000010,
+					P_IRQ =    0b00000100,
+					P_DECIMAL= 0b00001000,
+					P_B1 =     0b00010000,
+					P_B2 =     0b00100000,
+					P_OVERFLOW=0b01000000,
+					P_NEGATIVE=0b10000000;
 	public:
 		//Registors
-		int a,x,y,s,p;
-		int pc;
-		//memory
-		//int *memory;
-		//std::vector<int> cart;
-		//ppu *PPU;
-		//controller *CONTRL;
+		uint8_t a,x,y,s,p;
+		uint16_t pc;
+	
 		NES *nes;
 		int cycles;
+		int numCycles;
 		bool vBlank;
 		std::vector<instruction> opcodes;
 		cpu();
@@ -34,8 +41,8 @@ class cpu{
 		int *ppuReg2000;
 		int *ppuReg2002;
 		
-
-		void runInstructions();
+		//Address modes
+		int runInstructions();
 		int acc();
 		int abs();
 		int absX();
@@ -50,7 +57,7 @@ class cpu{
 		int zpgX();
 		int zpgY();
 
-		//int getCycles(int,int,int);
+		//Instructions
 		void IRQ();
 		void NMI();
 		void reset();

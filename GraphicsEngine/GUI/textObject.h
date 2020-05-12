@@ -14,8 +14,14 @@ class Text : public Panel{
 
 		FT_Library library;
 		FT_Face face;
+
+		GLuint stringFbo,stringTex;
+
+		Panel *sChar;
 		
-		Text(int,int,float,std::string,std::string,std::string="./GUI/textVertShader",std::string="./GUI/textFragShader");
+		Text(int,int,float,std::string,std::string,std::string="./GraphicsEngine/GUI/textVertShader",std::string="./GraphicsEngine/GUI/textFragShader");
+
+		Text(int,int,float,std::string,std::string, GLFWwindow*,std::string="./GraphicsEngine/GUI/textVertShader",std::string="./GraphicsEngine/GUI/textFragShader");
 		
 		void setText(std::string);
 		void setColor(float,float,float);

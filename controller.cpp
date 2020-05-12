@@ -4,7 +4,7 @@
 
 using namespace std;
 
-/*
+/*Button Mappings:
 	0 A
 	1 B
 	2 Select
@@ -15,6 +15,7 @@ using namespace std;
 	7 Right
 */
 controller::controller(){
+	//Init
 	buttons_p1 = 0;
 	nextButton_p1 = 0;
 	buttons_p2 = 0;
@@ -24,8 +25,9 @@ controller::controller(){
 //0=P1
 //1=P2
 
+//Store controller values
 void controller::pollController(int value, int contrlNum){
-		//glfwPollEvents();
+		
 		if (value & 0b00000001){
 			if (contrlNum == 0)
 				nextButton_p1 = buttons_p1;
@@ -34,12 +36,15 @@ void controller::pollController(int value, int contrlNum){
 		}
 }
 
+//Read stored controller values
 int controller::readController(int contrlNum){
+	//Get button value
 	int tmp = 0x40 + (((contrlNum)?nextButton_p2:nextButton_p1) & 0b00000001);
+	//Load next button
 	if (contrlNum == 0)
 		nextButton_p1 >>= 1;
 	else
 		nextButton_p2 >>= 1;
-	//cout << "readController " << tmp << endl;
+	//Return button value
 	return tmp;
 }

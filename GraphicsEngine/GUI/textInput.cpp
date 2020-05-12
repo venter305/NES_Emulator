@@ -2,13 +2,21 @@
 
 using namespace std;
 
-TextInput::TextInput(int x,int y,int w,int h,string vsName,string fsName): Panel(x,y,w,h,vsName,fsName){
+TextInput::TextInput(int x,int y,int w,int h,string vsName,string fsName): TextInput(x,y,w,h,NULL,vsName,fsName){
+}
+
+TextInput::TextInput(int x,int y,int w,int h,GLFWwindow *window,string vsName,string fsName): Panel(x,y,w,h,window,vsName,fsName){
+	//Init
 	text = new Text(0,0,15,"","/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf");
 	drawText();
 
 }
 
+//Render the text
 void TextInput::drawText(){
+	GLFWwindow *currWindow = glfwGetCurrentContext();
+	glfwMakeContextCurrent(context);
+	//Set up the Texture
 	int currFramebuffer;
 	glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currFramebuffer);
 	int currTexture;
@@ -26,15 +34,16 @@ void TextInput::drawText(){
 
 	int currViewport[4];
 	glGetIntegerv(GL_VIEWPORT,currViewport);
-	glViewport(0,0,200,50);
-
+	
+	//Background
 	glColor3f(1,1,1);
-	glRectf(-1,-1,1,1);
+	glRecti(0,0,width,height);
 
+	//Text
 	text->drawText();
-	text->flipY();
 	text->draw();
 
 	glBindFramebuffer(GL_FRAMEBUFFER,currFramebuffer);
 	glViewport(currViewport[0],currViewport[1],currViewport[2],currViewport[3]);
+	glfwMakeContextCurrent(currWindow);
 }

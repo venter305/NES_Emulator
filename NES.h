@@ -1,31 +1,39 @@
 #ifndef NES_H_
 #define NES_H_
 #include <iostream>
-#include <GLFW/glfw3.h>
 #include "cpu.h"
 #include "ppu.h"
+#include "apu.h"
 #include "controller.h"
 #include "cartridge.h"
 
 class NES{
 	
 	public:
+		//Components
 		cpu CPU;
 		ppu PPU;
+		apu APU;
 		controller CONTRL;
 		cartridge CART;
-		GLFWwindow *window;
 		
+		GLFWwindow *window;
 
-		int *memory;
+		int cpuTmpCycles = 0;
+		int apuTmpCycles = 0;
+		
+		int memory[0x10000];
 		
 		NES();
 		~NES();
 		void reset();
+		void clock(int);
 		int readMemory(int addr);
 		int PPURead(int addr);
 		void writeMemory(int addr, int value);
 		void PPUWrite(int addr, int value);
+		void saveState();
+		void loadState();
 	
 
 };

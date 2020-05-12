@@ -5,6 +5,7 @@
 	
 class mapper_002: public mapper{
 	public:
+		//Registers
 		int prgBank;
 	
 		mapper_002(int,int);

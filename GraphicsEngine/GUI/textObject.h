@@ -1,34 +1,48 @@
-#ifndef TEXTPANEL_H_
-#define TEXTPANEL_H_
+#pragma once
 
 #include "panel.h"
+#include "GUIElement.h"
 #include <freetype2/ft2build.h>
+#include <vector>
+
 #include FT_FREETYPE_H
 
-class Text : public Panel{
+class Text : public GUIElement{
 	public:
+
+		int xPos;
+		int yPos;
+
+		int width;
+		int height;
+
 		std::string text;
-		float textScale;
 		std::string font;
-		float color[3];
 
-		FT_Library library;
-		FT_Face face;
+		float fontSize;
 
-		GLuint stringFbo,stringTex;
+		float color[3] = {0.0,0.0,0.0};
 
-		Panel *sChar;
-		
-		Text(int,int,float,std::string,std::string,std::string="./GraphicsEngine/GUI/textVertShader",std::string="./GraphicsEngine/GUI/textFragShader");
+		Text(int,int,float,std::string,std::string);
+		~Text();
 
-		Text(int,int,float,std::string,std::string, GLFWwindow*,std::string="./GraphicsEngine/GUI/textVertShader",std::string="./GraphicsEngine/GUI/textFragShader");
-		
+		void draw();
 		void setText(std::string);
-		void setColor(float,float,float);
-		void setTextSize(float);
-		
-		void drawText();
-		void drawText(int,int,float,std::string,std::string);
-};
+		void setPos(int,int);
+		void setFontSize(float);
+		void setTextColor(float,float,float);
 
-#endif
+
+private:
+	std::string vertShader = "./GraphicsEngine/GUI/panelVertShader";
+	std::string fragShader = "./GraphicsEngine/GUI/textFragShader";
+
+	int penX,penY;
+	int newLines = 0;
+
+	std::vector<Panel*> characters;
+	FT_Library library;
+	FT_Face face;
+
+	void addCharacter(char);
+};

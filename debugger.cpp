@@ -19,7 +19,7 @@ Debugger::Debugger(){
 	glLoadIdentity();
 	gluOrtho2D(0.0,dialogX,0.0,dialogY);
 	
-	glfwHideWindow(window);
+	//glfwHideWindow(window);
 
 	charsPanel = new Panel(0,500,256,128);
 	ntPanel = new Panel(0,0,512,500);
@@ -37,6 +37,7 @@ void Debugger::display(){
 	glfwMakeContextCurrent(window);
 	glClearColor(0,0,0,0);
 	glClear(GL_COLOR_BUFFER_BIT);
+
 
 	/*n->PPU.drawChars(charsPanel);
 	charsPanel->setSize(512,256);

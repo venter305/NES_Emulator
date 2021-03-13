@@ -10,22 +10,28 @@ uint8_t *SoundManager::soundBuf = new uint8_t[SoundManager::bufSize];
 int SoundManager::outBufIndex = 0;
 int SoundManager::samplesNeeded = 0;
 bool SoundManager::running = true;
+uint8_t (*SoundManager::UserFunc)() = 0;
 
 void SoundManager::stream_write_callback(pa_stream *s, size_t length, void *userdata){
 
 	samplesNeeded = length;
-	uint8_t buf[length];
+	uint8_t buf[samplesNeeded];
 
 	//cout << "--------" << length << endl;
-	while(samplesNeeded > 0 && running){}
-	for (int i=0;i<length;i++){
-		buf[i] = soundBuf[outBufIndex];
+	//while(samplesNeeded > 0 && running){
+	//}
+	for (int i=0;i<samplesNeeded;i+=2){
+		buf[i] = 0;
+		buf[i+1] = UserFunc();
+		//buf[i+1] = 0;
+		//buf[i] = soundBuf[outBufIndex];
 		//cout << (int)buf[i] << ' ' << soundBuf[outBufIndex] << endl;
-		if (outBufIndex == (bufSize-1))
+		/*if (outBufIndex == (bufSize-1))
 			outBufIndex = 0;
 		else
-			outBufIndex++;
+			outBufIndex++;*/
 	}
+
 	//cout << outBufIndex << endl;
 	pa_stream_write(s,buf,length,NULL,0,PA_SEEK_RELATIVE);
 	
@@ -43,16 +49,16 @@ void SoundManager::context_state_callback(pa_context *c, void *userdata){
 	static const pa_sample_spec ss = {
         .format = PA_SAMPLE_S16LE,
         .rate = 48000,
-        .channels = 2
+        .channels = 1
     };
 
-		int bufSize1 = 48000*2;
+		int bufSize1 = 1024*8;
 
 		const pa_buffer_attr bufAttr = {
 		.maxlength = (uint32_t)bufSize1,
-		.tlength = (uint32_t)bufSize1,
+		.tlength = (uint32_t)-1,
 		.prebuf = (uint32_t)-1,
-		.minreq = (uint32_t)bufSize1,
+		.minreq = (uint32_t)-1,
 		.fragsize = (uint32_t)-1		
 	};
 	
@@ -60,7 +66,7 @@ void SoundManager::context_state_callback(pa_context *c, void *userdata){
 	
 	stream = pa_stream_new(c,"Test",&ss,NULL);
 pa_stream_set_state_callback(stream,stream_state_callback,NULL);		  pa_stream_set_write_callback(stream,stream_write_callback,NULL);
-	pa_stream_connect_playback(stream,NULL,NULL,(pa_stream_flags_t)0,NULL,NULL);
+	pa_stream_connect_playback(stream,NULL,&bufAttr,(pa_stream_flags_t)0,NULL,NULL);
 }
 
 SoundManager::SoundManager(){
@@ -101,6 +107,5 @@ void SoundManager::clock(){
 	}
 	else
 		sBufIndex++;
-
 	samplesNeeded--;
 }

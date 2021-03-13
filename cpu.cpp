@@ -1,4 +1,5 @@
 #include "NES.h"
+#include "cpu.h"
 #include <fstream>
 #include <bitset>
 
@@ -27,6 +28,7 @@ cpu::cpu(){
 	s = 0xfd;
 	p = 0x24;
 	cycles = 0;
+	numCycles = 0;
 	vBlank = false;
 	instrAddr = 0;
 	instrVal = 0;
@@ -59,22 +61,28 @@ cpu::cpu(){
 //Run next Instruction
 int cpu::runInstructions(){
 	//If valid pc
+	int extraCycles = 0;
 	if(pc){
 		//Log Instruction
-		if(LOG)cout << hex << pc << " A:"<< (int)a << " X:" << (int)x << " Y:" << (int)y << " 0x6000 " << nes->readMemory(0x6000) << dec << " PPU Cycles:"<< nes->PPU.cycles << " PPU Scanline:" << nes->PPU.scanlines << " PPU Frames:" << nes->PPU.frames <<" p:" << bitset <8> (p) << ' ';
-		int instr = nes->readMemory(pc++);
-		cycles = opcodes[instr].cycles;
+		if (cycles == 0){
+			if(LOG)cout << hex << pc << " A:"<< (int)a << " X:" << (int)x << " Y:" << (int)y << " 0x6000 " << nes->readMemory(0x6000) << dec << " PPU Cycles:"<< nes->PPU.cycles << " PPU Scanline:" << nes->PPU.scanlines << " PPU Frames:" << nes->PPU.frames <<" p:" << bitset <8> (p) << ' ';\
+			int instr = nes->readMemory(pc++);
+			cycles = opcodes[instr].cycles;
+			
+			//Run Instruction
+			int extra1 = (this->*opcodes[instr].addrMode)();
+			int extra2 = (this->*opcodes[instr].opcode)();
+			extraCycles += extra1+extra2;
+			cycles += (extra1&extra2);
+			numCycles += cycles;
+			//Cycle PPU and APU
+			//nes->PPU.clock(3*cycles);
+			//nes->APU.clock(cycles);
+		}
 		
-		//Run Instruction
-		int extra1 = (this->*opcodes[instr].addrMode)();
-		int extra2 = (this->*opcodes[instr].opcode)();
-		cycles += (extra1&extra2);
-		numCycles += cycles;
-		//Cycle PPU and APU
-		//nes->PPU.clock(3*cycles);
-		//nes->APU.clock(cycles);
+		cycles--;
 	}
-	return cycles;
+	return extraCycles;
 }
 
 //Interrupt Request
@@ -166,8 +174,8 @@ int cpu::absX(){
 int cpu::absY(){
 	int x1 = nes->readMemory(pc++);
 	int x2 = nes->readMemory(pc++);
-	instrAddr = (x2*256)+x1+y;
-	instrVal = nes->readMemory((x2*256)+x1+y);
+	instrAddr = ((x2*256)+x1+y)%0x10000;
+	instrVal = nes->readMemory(instrAddr);
 	if (x1+y > 0xFF)
 		return 1;
 	else

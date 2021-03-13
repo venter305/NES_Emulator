@@ -23,6 +23,8 @@ class SoundManager {
 
 		SoundManager();
 		~SoundManager();
+		
+		static uint8_t (*UserFunc)();
 
 		void clock();
 

@@ -139,13 +139,9 @@ void ppu::reset(){
 void ppu::runCycles(int c){
 }
 
-//Cycle the PPU
-void ppu::clock(int c){
+/*void ppu::clock(int c){
 	int tmpCycles = c;
 	locked = true;
-	unsigned char lookup[16] = {
-			0x0, 0x8, 0x4, 0xc, 0x2, 0xa, 0x6, 0xe,
-			0x1, 0x9, 0x5, 0xd, 0x3, 0xb, 0x7, 0xf, };
 	while(tmpCycles > 0){
 		cycles++;
 		int bgPatternAddr = (*ppuReg2000&0x10)*0x100;
@@ -372,90 +368,306 @@ void ppu::clock(int c){
 	}					
 
 	locked = false;			
+}*/
+
+//Cycle the PPU
+void ppu::clock(int c){
+	int tmpCycles = c;
+	auto transferVertical = [&](){
+		//Set v equal to t
+		v &= (0xFFFF-0x7BE0);
+		v |= (t & 0x7BE0);
+	};
+
+	auto transferHorizontal = [&](){
+		v &= (0xFFFF-0x41f);
+		v |= (t & 0x41f);
+	};
+
+	auto incrementX = [&](){
+		if ((v & 0x001f) == 31){
+			v &= (0xFFFF-0x001f);
+			v ^= 0x0400;	
+		}
+		else
+			v++;
+	};
+
+	auto incrementY = [&](){
+		int fineY = (v & 0x7000);
+		int coarseY = (v & 0x03E0)>>5;
+		if (fineY != 0x7000)
+			v += 0x1000;
+		else{
+			v &= (0xFFFF-0x7000);
+			if (coarseY == 29){
+				coarseY = 0;
+				v ^= 0x0800;
+			}
+			else if (coarseY == 31)
+				coarseY = 0;
+			else
+				coarseY++;
+			v = (v & (0xFFFF-0x03e0)) | (coarseY<<5);
+		}
+	};
+
+	while(tmpCycles > 0){
+		cycles++;
+		int bgPatternAddr = (*ppuReg2000&0x10)*0x100;
+		if (scanlines == -1){
+			if (tmpScanline != scanlines){
+				tmpScanline = scanlines;
+				frameComplete = false;
+				//Reset Sprite 0
+				nes->writeMemory(0x2002, *ppuReg2002 & 0b10111111);
+				
+				//Set up Background Registers
+			}
+			//Reload the vertical scroll bits
+			if ((nes->readMemory(0x2001) & 0x18)){
+				//if (cycles >= 280 && cycles <= 304){
+				if (cycles == 280){
+					//Set v equal to t
+					transferVertical();
+				}
+			}
+			//Set the OAMADDR to 0
+			if (cycles >= 257 && cycles <= 320)
+				nes->writeMemory(0x2003, 0);
+		}
+		else if (scanlines >= 0 && scanlines <= 239){
+			if ((*ppuReg2001 & 0x18)){
+				//Rendering cycles
+				if ((cycles >= 328 && cycles < 337)*1 || (cycles >= 1 && cycles <= 256)) {
+					drawPixel();
+					//Every 8 cycles
+					switch((cycles-1)%8){
+						//Load Background registers
+						case 0:
+							bgTile = nes->PPURead(0x2000 | (v&0x0FFF));
+							break;
+						case 2:
+							attrByte = nes->PPURead(0x23C0 | (v&0x0C00) | ((v >> 4) & 0x38) | ((v >> 2) & 0x07));
+							if (v&0x40)attrByte >>= 4;
+							if (v&0x2)attrByte >>= 2;
+							break;
+						case 4:
+							bgPatternLo = nes->PPURead(bgTile*0x10+bgPatternAddr+((v&0x7000)/0x1000));
+							break;
+						case 6:
+							bgPatternHi = nes->PPURead(bgTile*0x10+bgPatternAddr+ 8 +((v&0x7000)/0x1000));
+							break;
+						case 7:
+							bgShiftReg16[0] = (bgShiftReg16[0]&0xFF00) | bgPatternLo;
+							bgShiftReg16[1] = (bgShiftReg16[1]&0xFF00) | bgPatternHi;
+							
+							bgLatch[0] = (attrByte&0x2)>0;
+							bgLatch[1] = (attrByte&0x1);
+							incrementX();
+							break;
+					}
+					//Increment vertical position in v
+					if (cycles == 256){
+						incrementY();
+					}
+				}
+				else if (cycles == 257){
+					//Copy horizontal bits from t to v
+					nes->writeMemory(0x2003, 0);
+					transferHorizontal();
+
+				//Get next scanline Sprite data
+					int tmpSL = scanlines;
+					numSprites = 0;
+					int tmpPlane1 = 0;
+					int tmpPlane2 = 0;
+					int spriteSize = (*ppuReg2000&0x20)>>5;
+					int palletTable = 0;
+					int tileOffset = 0;
+					int tileAddr = 0;
+					sMask = 0x80;
+					for (int i=0;i<64;i++){
+						if (numSprites >= 8)
+							break;
+						if (OAM[i*4] <= tmpSL && (OAM[i*4]+7+(8*spriteSize))>=(tmpSL) && numSprites < 8){
+							if (i==0)
+								s0Hit = true;
+							palletTable = ((spriteSize)?OAM[i*4+1]&1 : (*ppuReg2000&8)>>3)*0x1000;
+							tileOffset = (tmpSL-OAM[i*4])%8;
+							tileAddr = ((!spriteSize)?OAM[i*4+1]:OAM[i*4+1]&0xFE)*0x10;
+							if ((tmpSL-OAM[i*4]) >= 8 && spriteSize)
+								tileAddr += 0x10;
+							if (OAM[i*4+2]&0x80){
+								if (spriteSize){
+									if ((tmpSL-OAM[i*4]) >= 8)
+										tileAddr -= 0x10;
+									else
+										tileAddr += 0x10;
+								}
+								tmpPlane1 = nes->PPURead(palletTable+tileAddr +(7-tileOffset));
+								tmpPlane2 = nes->PPURead(palletTable+tileAddr + 8 + (7-tileOffset));
+							}
+							else{
+								tmpPlane1 = nes->PPURead(palletTable+tileAddr+(tileOffset));
+								tmpPlane2 = nes->PPURead(palletTable+tileAddr+8+(tileOffset));
+							}
+			
+							if (OAM[i*4+2]&0x40){
+								tmpPlane1 = (lookup[tmpPlane1&0xf]<<4) | lookup[tmpPlane1>>4];
+								tmpPlane2 = (lookup[tmpPlane2&0xf]<<4) | lookup[tmpPlane2>>4];
+							}
+							
+							sShiftReg8_1[numSprites] = tmpPlane1;
+							sShiftReg8_2[numSprites] = tmpPlane2;
+							
+							sCount[numSprites] = OAM[i*4+3];
+							sLatch[numSprites] = OAM[i*4+2];
+							numSprites++;
+						}
+					}
+					
+					sActiveLatch = 0;
+				}
+				else if (cycles == 338){
+					int tmpBg = nes->PPURead(0x2000 | ((v-2)&0x0FFF));
+					int tmpBgLo = nes->PPURead(tmpBg*0x10+bgPatternAddr+(((v-2)&0x7000)/0x1000));
+					int tmpBgHi = nes->PPURead(tmpBg*0x10+bgPatternAddr+ 8 +(((v-2)&0x7000)/0x1000));
+					bgShiftReg16[0] = tmpBgLo*0x100 | bgPatternLo;
+					bgShiftReg16[1] = tmpBgHi*0x100 | bgPatternHi;
+
+
+					bgLatch[0] = (attrByte&0x2)>0;
+					bgLatch[1] = attrByte&0x1;
+							
+					bgShiftReg8[0] = bgLatch[0]*0xFF;
+					bgShiftReg8[1] = bgLatch[1]*0xFF;
+				}
+			}
+		}
+		
+		else if (scanlines == 241 && (*ppuReg2002 & 0b10000000) == 0 && vBlank == false){
+			vBlank = true;
+			nes->writeMemory(0x2002, *ppuReg2002 | 0b10000000);
+			frames++;
+			frameComplete = true;
+			
+			//Send NMI
+			if (frames >= 2 && (*ppuReg2000 & 0b10000000)){
+				nes->CPU.NMI();
+			}
+		}
+			
+		//Reset Vblank
+		else if (scanlines == 260 && tmpScanline != scanlines){
+			tmpScanline = scanlines;
+			s0Hit = false;
+			nes->writeMemory(0x2002,*ppuReg2002 & 0b01111111);
+			vBlank = false;
+		}
+
+		//Increment scanline
+		if (cycles > 340){
+			cycles = 0;
+			if (scanlines < 260)
+				scanlines++;
+			else
+				scanlines = -1;
+		}
+
+		tmpCycles--;
+	}					
+
+	locked = false;			
 }
 
 //Draw a Pixel
 void ppu::drawPixel(){
-	//Get background data
-	int bgPlane1 = 0;
-	int bgPlane2 = 0;
-	int bgAttr1 = 0;
-	int bgAttr2 = 0;
-	int palletAddr = 0;
-	
-	//If background is disabled or left hand side is hidden
-	if ((*ppuReg2001&0x8) == 0 || (((*ppuReg2001&2) == 0) && cycles <= 8)){
-			bgPlane1 = 0;
-			bgPlane2 = 0;
-	}
-	else{
-		bgPlane1 = (bgShiftReg16[0]>>(15-x))&1;
-	  bgPlane2 = (bgShiftReg16[1]>>(15-x))&1;
-		bgAttr1 = (bgShiftReg8[0] >> (7-x))&1;
-		bgAttr2 = (bgShiftReg8[1] >> (7-x))&1;
-	}
-
-	//Render Sprite
-	int sTmpPlane1 = 0;
-	int sTmpPlane2 = 0;
-	int sTmpPallet = 0;
-	int sNum = 0;
-	bool out = false;
-	int sPlane1 = 0;
-	int sPlane2 = 0;
-	int sPallet = 0;
-	
-	if (*ppuReg2001&0x10)
-		for (int i=0;i<numSprites;i++){
-			if(sCount[i]-- == 0)
-				sActiveLatch |= (128>>i);
-			
-			if (sActiveLatch & (128>>i)){
-				
-				sTmpPlane1 = (sShiftReg8_1[i] & 0x80)>0;
-				sTmpPlane2 = (sShiftReg8_2[i] & 0x80)>0 ;
-			
-				sTmpPallet = sLatch[i] & 3;
-					
-				sShiftReg8_1[i]<<=1;
-				sShiftReg8_2[i]<<=1;
-				if (sTmpPlane1|sTmpPlane2 && ((*ppuReg2001&0x4) || cycles > 8)){
-					if (!out){
-						out = true;
-						sNum = i;
-						sPlane1 = sTmpPlane1;
-						sPlane2 = sTmpPlane2;
-						sPallet = sTmpPallet;
-					}
-					if (bgPlane1|bgPlane2 && s0Hit && i==0 && !(*ppuReg2002&0x40) && cycles < 256){
-						nes->writeMemory(0x2002, *ppuReg2002 | 0x40);
-					}			
-				}
-				
-			}
+	if (cycles >= 1 && cycles <= 256 && scanlines > -1 && scanlines <= 239){
+		//Get background data
+		int bgPlane1 = 0;
+		int bgPlane2 = 0;
+		int bgAttr1 = 0;
+		int bgAttr2 = 0;
+		int palletAddr = 0;
+		
+		//If background is disabled or left hand side is hidden
+		if ((*ppuReg2001&0x8) == 0 || (((*ppuReg2001&2) == 0) && cycles <= 8)){
+				bgPlane1 = 0;
+				bgPlane2 = 0;
+		}
+		else{
+			bgPlane1 = (bgShiftReg16[0]>>(15-x))&1;
+			bgPlane2 = (bgShiftReg16[1]>>(15-x))&1;
+			bgAttr1 = (bgShiftReg8[0] >> (7-x))&1;
+			bgAttr2 = (bgShiftReg8[1] >> (7-x))&1;
 		}
 
-	if (!(bgPlane1|bgPlane2) && !(sPlane1|sPlane2))
-		palletAddr = 0x3F00;
-	else if (!(bgPlane1|bgPlane2))
-		palletAddr = 0x3F10 + (sPallet<<2) + ((sPlane2<<1)+sPlane1);
-	else if (!(sPlane1|sPlane2))
-		palletAddr = 0x3F00 + (((bgAttr1<<1)+bgAttr2)<<2) + ((bgPlane2<<1)+bgPlane1);
-	else if ((sLatch[sNum]&0x20)==0)
-		palletAddr = 0x3F10 + (sPallet<<2) + ((sPlane2<<1)+sPlane1);
-	else
-		palletAddr = 0x3F00 + (((bgAttr1<<1)+bgAttr2)<<2) + ((bgPlane2<<1)+bgPlane1);
+		//Render Sprite
+		int sTmpPlane1 = 0;
+		int sTmpPlane2 = 0;
+		int sTmpPallet = 0;
+		int sNum = 0;
+		bool out = false;
+		int sPlane1 = 0;
+		int sPlane2 = 0;
+		int sPallet = 0;
+		
+		if (*ppuReg2001&0x10)
+			for (int i=0;i<numSprites;i++){
+				if(sCount[i]-- == 0)
+					sActiveLatch |= (128>>i);
+				
+				if (sActiveLatch & (128>>i)){
+					
+					sTmpPlane1 = (sShiftReg8_1[i] & 0x80)>0;
+					sTmpPlane2 = (sShiftReg8_2[i] & 0x80)>0 ;
+				
+					sTmpPallet = sLatch[i] & 3;
+						
+					sShiftReg8_1[i]<<=1;
+					sShiftReg8_2[i]<<=1;
+					if (sTmpPlane1|sTmpPlane2 && ((*ppuReg2001&0x4) || cycles > 8)){
+						//2if (i == 0 && scanlines == 38)
+							//cout << (bgPlane1|bgPlane2) << endl;
+						if (!out){
+							out = true;
+							sNum = i;
+							sPlane1 = sTmpPlane1;
+							sPlane2 = sTmpPlane2;
+							sPallet = sTmpPallet;
+						}
+						if (bgPlane1|bgPlane2 && s0Hit && i==0 && !(*ppuReg2002&0x40) && cycles < 256){
+							nes->writeMemory(0x2002, *ppuReg2002 | 0x40);
+							//cout << scanlines << endl;
+						}			
+					}
+					
+				}
+			}
 
-	//Add pixel to screen
-	int palletNum = nes->PPURead(palletAddr)&0b00111111;
+		if (!(bgPlane1|bgPlane2) && !(sPlane1|sPlane2))
+			palletAddr = 0x3F00;
+		else if (!(bgPlane1|bgPlane2))
+			palletAddr = 0x3F10 + (sPallet<<2) + ((sPlane2<<1)+sPlane1);
+		else if (!(sPlane1|sPlane2))
+			palletAddr = 0x3F00 + (((bgAttr1<<1)+bgAttr2)<<2) + ((bgPlane2<<1)+bgPlane1);
+		else if ((sLatch[sNum]&0x20)==0)
+			palletAddr = 0x3F10 + (sPallet<<2) + ((sPlane2<<1)+sPlane1);
+		else
+			palletAddr = 0x3F00 + (((bgAttr1<<1)+bgAttr2)<<2) + ((bgPlane2<<1)+bgPlane1);
 
-	GLubyte colorVal1 = (pallet[palletNum][0]);
-	GLubyte colorVal2 = (pallet[palletNum][1]);
-	GLubyte colorVal3 = (pallet[palletNum][2]);
-	
-	pixelVal[scanlines][cycles-1][0] = colorVal1;
-	pixelVal[scanlines][cycles-1][1] = colorVal2;
-	pixelVal[scanlines][cycles-1][2] = colorVal3;
+		//Add pixel to screen
+		int palletNum = nes->PPURead(palletAddr)&0b00111111;
+
+		GLubyte colorVal1 = (pallet[palletNum][0]);
+		GLubyte colorVal2 = (pallet[palletNum][1]);
+		GLubyte colorVal3 = (pallet[palletNum][2]);
+		
+		pixelVal[scanlines][cycles-1][0] = colorVal1;
+		pixelVal[scanlines][cycles-1][1] = colorVal2;
+		pixelVal[scanlines][cycles-1][2] = colorVal3;
+	}
 	
 	//Increment Background registers
 	bgShiftReg16[0] = (bgShiftReg16[0]<<1)&0xFFFF;

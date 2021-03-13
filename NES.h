@@ -24,10 +24,12 @@ class NES{
 		
 		int memory[0x10000];
 		
+		double dTime;
+		
 		NES();
 		~NES();
 		void reset();
-		void clock(int);
+		bool clock(int);
 		int readMemory(int addr);
 		int PPURead(int addr);
 		void writeMemory(int addr, int value);

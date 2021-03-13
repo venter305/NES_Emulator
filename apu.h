@@ -34,11 +34,11 @@ class apu{
 		int timer = 0;
 		int currTimer = 0;
 		int lenCounter = 0;
-		int output = 0;
+		double output = 0;
 		int seqMask = 1;
 		int seqOffset = 1;
 		double freq = 0;
-		int freqCount = 0;
+		double freqCount = 0;
 	} pulse1,pulse2;
 
 	struct Triangle{
@@ -50,9 +50,9 @@ class apu{
 		int timer = 0;
 		int currTimer = 0;
 		int lengthCounter = 0;
-		int output = 0;
+		double output = 0;
 		double freq = 0;
-		int freqCount = 0;
+		double freqCount = 0;
 		int seqIndex = 0;
 		int outputLookup[32] = {15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
 	}triangle;
@@ -68,16 +68,38 @@ class apu{
 		bool loop = false;
 		int period = 0;
 		int lenCounter = 0;
-		int output = 0;
+		double output = 0;
 		int shiftReg = 1;
 		int currTimer = 0;
 		bool mode = false;
 		int periodLookup[16] = {4,8,16,32,64,96,128,160,202,254,380,508,762,1016,2034,4068};
 	}noise;
 
+	int dmcRateLookup[16] = {428, 380, 340, 320, 286, 254, 226, 214, 190, 160, 142, 128, 106,  84,  72,  54};
+	struct DMC{
+		bool enabled = 0;
+		int sampleBuffer = 0;
+		int shiftBuffer = 0;
+		int timer = 0;
+		int currTimer = 0;
+		int sampleAddress = 0;
+		int sampleLength = 0;
+		bool irqFlag = false;
+		bool irqEnabled = false;
+		int output = 0;
+		bool loopFlag = false;
+		int bitsRemaining = 0;
+		int bytesRemaining = 0;
+		int currAddr = 0;
+		bool silenceFlag = false;
+		bool sampleEmpty = true;
+	}dmc;
+
 	struct fCounter{
 		bool mode = false;
 		bool irqFlag = false;
+		bool irqInhibit = false;
+		int count = 0;
 	}frameCounter;
 
 	NES *nes;
@@ -101,20 +123,23 @@ class apu{
 	int max = 124;
 	int count1 = 124;
 	int duty = 0b00001111;
-	int j = 1;
+	int j = 0;
 	int mask = 1;
+	
+	uint8_t output;
+	
 	
 	apu();
 	~apu();
+	
 	void setChannelEnables(int);
 	void clock(int);
 	void soundClock();
-	void playSound();
+	uint8_t getSample();
 	void reset();
-	double genSquareWave(double,float,int);
-	/*static void stream_state_callback(pa_stream *s, void *userdata);
-	static void context_state_callback(pa_context *c, void *userdata);
-	static void stream_write_callback(pa_stream *s, size_t length, void *userdata);*/
+	double genSquareWave(double,float,double);
+	void halfFrame();
+	void quartFrame();
 };
 
 #endif

@@ -15,6 +15,7 @@ NES::NES(){
 	PPU.ppuReg2002 = &memory[0x2002];
 	CART.nes = this;
 	APU.nes = this;
+	dTime = 0;
 }
 
 NES::~NES(){
@@ -33,13 +34,24 @@ void NES::reset(){
 	CART.reset();
 }
 
-void NES::clock(int cycles){
+bool NES::clock(int cycles){
 	while(cycles){
-		cpuTmpCycles = CPU.runInstructions();
-		PPU.clock(3*cpuTmpCycles);		
-		APU.clock(cpuTmpCycles);
+		int extraCycles = 0;
+		if (cpuTmpCycles % 3 == 0){
+			extraCycles = CPU.runInstructions();
+		}
+		PPU.clock(1);
+		APU.clock(1);
+		cpuTmpCycles++;
+		
+		dTime += 1.0 / 5369318.0;
+		if (dTime > 1.0/(48000)){
+			dTime = 0;
+			return true;
+		}
 		cycles--;
 	}
+	return false;
 }
 
 //Read from memory
@@ -60,9 +72,211 @@ int NES::readMemory(int addr){
 	//Read from OAM memory
 	if (mAddr == 0x2004)
 		return PPU.OAM[memory[0x2003]];
+		
+		
+	if (mAddr == 0x4015){
+		uint8_t out = 0x00;
+		out |= (APU.pulse1.lenCounter > 0) ? 0x01 : 0x00;
+		out |= (APU.pulse2.lenCounter > 0) ? 0x02 : 0x00;	
+		out |= (APU.triangle.lengthCounter > 0) ? 0x04 : 0x00;
+		out |= (APU.noise.lenCounter > 0) ? 0x08 : 0x00;
+		out |= (APU.dmc.bytesRemaining > 0) ? 0x10 : 0x00;
+		out |= (APU.frameCounter.irqFlag) ? 0x40 : 0x00;
+		out |= (APU.dmc.irqFlag) ? 0x80 : 0x00;
+		APU.frameCounter.irqFlag = false;
+		//cout << APU.dmc.bytesRemaining << endl;
+	//	if (APU.pulse1.lenCounter)cout << APU.pulse1.lenCounter << endl;
+		return out;
+	}
 	
 	return memory[mAddr];
 }
+
+//Write to memory
+void NES::writeMemory(int addr, int value){
+		//Set up memory mirrors
+		int mAddr = addr;
+		//Internal RAM
+		if (addr >= 0x0800 && addr < 0x2000)
+			mAddr = addr%0x0800;
+		//PPU registers
+	  else if (addr >= 0x2008 && addr < 0x4000)
+			mAddr = addr%8+0x2008;
+		//Cartridge	
+		else if (addr >= 0x6000){
+			CART.cartWrite(addr,value);
+		}
+
+		//PPU Control
+	  if (mAddr == 0x2000){
+			PPU.t &= (0xFFFF-0x0C00);
+			PPU.t |= ((value & 3)<<10);
+		}
+		
+		//OAM Data
+		else if (mAddr == 0x2004){
+			PPU.OAM[memory[0x2003]] = value;			
+			memory[0x2003]++;
+		}
+		
+		//PPU Scroll
+		else if (mAddr == 0x2005){
+			if(!PPU.w){
+				PPU.t &= (0xFFFF-0x1F);
+				PPU.t |= ((value & 0b11111000)>>3);
+				PPU.x = (value & 0x7);
+				PPU.w = 1;
+			}
+			else {
+				PPU.t &= (0xFFFF-0x73e0);
+				PPU.t |= ((value & 0x7)<<12);
+				PPU.t |= ((value & 0b11111000)<<2);
+				PPU.w = 0;
+			}
+			
+		}
+		//PPU Address
+		else if (mAddr == 0x2006){
+			if (!PPU.w){
+				PPU.t &= 0x00FF;	
+				PPU.t |= ((value & 0b00111111)<<8);
+				PPU.w = 1;
+			}
+			else{
+				PPU.t &= 0xFF00;
+				PPU.t |= value;
+				PPU.v = PPU.t;
+				PPU.w = 0;
+			}
+		}
+		//PPU Data
+		else if (mAddr == 0x2007){
+			PPUWrite(PPU.v,value);
+			if (readMemory(0x2000) & 0b00000100)
+				PPU.v += 32;
+			else if ((readMemory(0x2000) & 0b00000100) == 0)
+				PPU.v++;	
+		}
+		//OAM DMA
+		else if (mAddr == 0x4014){
+			for (int i=0;i<256;i++){
+				PPU.OAM[i] = memory[(value*256)+i];
+			}
+			PPU.cycles += (513*3);
+		}
+		
+		auto pulseWrite = [this](apu::Pulse *p,int mAddr, int value,int addrOffset){
+			if (mAddr == 0x4000+addrOffset){
+				p->duty = (value&0xC0)>>6;
+				p->envelopeLoop = value&0x20;
+				p->constantVolume = value&0x10;
+				p->volume = value&0x0F;
+			}
+			else if (mAddr == 0x4001+addrOffset){
+				p->sweepEnable = value&0x80;
+				p->sPeriod = (value&0x70)>>4;
+				p->sNegate = (value&0x08);
+				p->sShift = value&0x07;
+				p->sReload = true;
+			}
+			else if (mAddr == 0x4002+addrOffset){
+				p->timer = (p->timer&0x700) + (value&0xFF);
+				p->freq = 1789773  / (16 * (double)(p->timer+1));
+			}
+			else if (mAddr == 0x4003+addrOffset){
+				//cout << APU.pulse1.lenCounter << endl;
+				p->timer = (p->timer&0xFF) + ((value&0x7)*0x100);
+				p->freq = 1789773  / (16 * (double)(p->timer+1));
+				//cout << APU.pulse1.timer << endl;	
+				if (p->enabled){
+					p->lenCounter = APU.lenCounterLookup[(value&0xF8)>>3];
+				}
+				p->seqMask = 1;
+				p->seqOffset = 0;
+				p->envelopeStart = true;
+			}
+		};
+		
+		pulseWrite(&APU.pulse1,mAddr,value,0);
+		pulseWrite(&APU.pulse2,mAddr,value,4);
+	
+		
+		//Triangle
+		if (mAddr == 0x4008){
+			APU.triangle.linControl = value&0x80;
+			APU.triangle.linReloadVal = value&0x7F;
+		}
+		else if (mAddr == 0x400A){
+			APU.triangle.timer = (APU.triangle.timer&0x700) + (value&0xFF);
+			APU.triangle.freq = 1789773  / (32 * (double)(APU.triangle.timer+1));
+		}
+		else if (mAddr == 0x400B){
+			APU.triangle.timer = (APU.triangle.timer&0xFF) + ((value&0x7)*0x100);
+			APU.triangle.freq = 1789773  / (32 * (double)(APU.triangle.timer+1));
+			if (APU.triangle.enabled)
+				APU.triangle.lengthCounter = APU.lenCounterLookup[(value&0xF8)>>3];
+			APU.triangle.linReloadFlag = true;
+		}
+		//Noise
+		else if (mAddr == 0x400C){
+			APU.noise.envelopeLoop = value&0x20;
+			APU.noise.constantVolume = value&0x10;
+			APU.noise.volume = value&0x0F;
+		}
+		else if (mAddr == 0x400E){
+			APU.noise.mode = value&0x80;
+			APU.noise.period = value&0x0F;
+		}
+		else if (mAddr == 0x400F){
+			if (APU.noise.enabled)
+				APU.noise.lenCounter = APU.lenCounterLookup[(value&0xF8)>>3];
+			APU.noise.envelopeStart = true;
+		}
+		//DMC
+		else if (mAddr == 0x4010){
+			APU.dmc.irqEnabled = value&0x80;
+			APU.dmc.irqFlag &= value&0x80; 
+			APU.dmc.loopFlag = value&0x40;
+			APU.dmc.timer = APU.dmcRateLookup[value&0xf]-1;
+		}
+		else if (mAddr == 0x4011){
+			APU.dmc.output = value&0x7F;
+		}
+		else if (mAddr == 0x4012){
+			APU.dmc.sampleAddress = 0xC000 + (value*64);
+		}
+		else if (mAddr == 0x4013){
+			APU.dmc.sampleLength = (value*16) + 1;
+			//cout << APU.dmc.sampleLength << endl;
+		}
+		//APU enable
+		else if (mAddr == 0x4015)
+			APU.setChannelEnables(value);
+		else if (mAddr == 0x4016)
+			CONTRL.pollController(value,0);
+		else if (mAddr == 0x4017){
+			APU.cycles = 0;
+	
+			if (APU.incCycles)
+				APU.frameCounter.count = 3;
+			else
+				APU.frameCounter.count = 4;
+			
+			APU.frameCounter.mode = value&0x80;
+			APU.frameCounter.irqInhibit = value&0x40;
+			if (value&0x40)
+				APU.frameCounter.irqFlag = false;
+				
+			if (value&0x80){
+				APU.halfFrame();
+				APU.quartFrame();
+			}
+		}
+		
+		memory[addr] = value;
+		memory[mAddr] = value;
+}
+
 
 //Read from PPU Memory
 int NES::PPURead(int addr) {
@@ -149,173 +363,6 @@ void NES::PPUWrite(int addr, int value){
 
 	PPU.memory[mAddr] = value;
 	PPU.memory[addr] = value;
-}
-
-//Write to memory
-void NES::writeMemory(int addr, int value){
-		//Set up memory mirrors
-		int mAddr = addr;
-		//Internal RAM
-		if (addr >= 0x0800 && addr < 0x2000)
-			mAddr = addr%0x0800;
-		//PPU registers
-	  else if (addr >= 0x2008 && addr < 0x4000)
-			mAddr = addr%8+0x2008;
-		//Cartridge	
-		else if (addr >= 0x6000){
-			CART.cartWrite(addr,value);
-		}
-
-		//PPU Control
-	  if (mAddr == 0x2000){
-			PPU.t &= (0xFFFF-0x0C00);
-			PPU.t |= ((value & 3)<<10);
-		}
-		
-		//OAM Data
-		else if (mAddr == 0x2004){
-			PPU.OAM[memory[0x2003]] = value;			
-			memory[0x2003]++;
-		}
-		
-		//PPU Scroll
-		else if (mAddr == 0x2005){
-			if(!PPU.w){
-				PPU.t &= (0xFFFF-0x1F);
-				PPU.t |= ((value & 0b11111000)>>3);
-				PPU.x = (value & 0x7);
-				PPU.w = 1;
-			}
-			else {
-				PPU.t &= (0xFFFF-0x73e0);
-				PPU.t |= ((value & 0x7)<<12);
-				PPU.t |= ((value & 0b11111000)<<2);
-				PPU.w = 0;
-			}
-			
-		}
-		//PPU Address
-		else if (mAddr == 0x2006){
-			if (!PPU.w){
-				PPU.t &= 0x00FF;	
-				PPU.t |= ((value & 0b00111111)<<8);
-				PPU.w = 1;
-			}
-			else{
-				PPU.t &= 0xFF00;
-				PPU.t |= value;
-				PPU.v = PPU.t;
-				PPU.w = 0;
-			}
-		}
-		//PPU Data
-		else if (mAddr == 0x2007){
-			PPUWrite(PPU.v,value);
-			if (readMemory(0x2000) & 0b00000100)
-				PPU.v += 32;
-			else if ((readMemory(0x2000) & 0b00000100) == 0)
-				PPU.v++;	
-		}
-		//OAM DMA
-		else if (mAddr == 0x4014){
-			for (int i=0;i<256;i++){
-				PPU.OAM[i] = memory[(value*256)+i];
-			}
-			PPU.cycles += (513*3);
-		}
-		//Pulse 1
-		else if (mAddr == 0x4000){
-			APU.pulse1.duty = (value&0xC0)>>6;
-			APU.pulse1.envelopeLoop = value&0x20;
-			APU.pulse1.constantVolume = value&0x10;
-			APU.pulse1.volume = value&0x0F;
-		}
-		else if (mAddr == 0x4001){
-			APU.pulse1.sweepEnable = value&0x80;
-			APU.pulse1.sPeriod = (value&0x70)>>4;
-			APU.pulse1.sNegate = (value&0x08);
-			APU.pulse1.sShift = value&0x07;
-			APU.pulse1.sReload = true;
-		}
-		else if (mAddr == 0x4002){
-			APU.pulse1.timer = (APU.pulse1.timer&0x700) + (value&0xFF);
-			APU.pulse1.freq = 1789773  / (16 * (double)(APU.pulse1.timer+1));
-		}
-		else if (mAddr == 0x4003){
-			APU.pulse1.timer = (APU.pulse1.timer&0xFF) + ((value&0x7)*0x100);
-			APU.pulse1.freq = 1789773  / (16 * (double)(APU.pulse1.timer+1));
-			APU.pulse1.lenCounter = APU.lenCounterLookup[(value&0xF8)>>3];
-			APU.pulse1.seqMask = 1;
-			APU.pulse1.seqOffset = 0;
-			APU.pulse1.envelopeStart = true;
-		}
-		//Pulse 2
-		else if (mAddr == 0x4004){
-			APU.pulse2.duty = (value&0xC0)>>6;
-			APU.pulse2.envelopeLoop = value&0x20;
-			APU.pulse2.constantVolume = value&0x10;
-			APU.pulse2.volume = value&0x0F;
-		}
-		else if (mAddr == 0x4005){
-			APU.pulse2.sweepEnable = value&0x80;
-			APU.pulse2.sPeriod = (value&0x70)>>4;
-			APU.pulse2.sNegate = (value&0x08);
-			APU.pulse2.sShift = value&0x07;
-			APU.pulse2.sReload = true;
-		}
-		else if (mAddr == 0x4006){
-			APU.pulse2.timer = (APU.pulse2.timer&0x700) + (value&0xFF);
-			APU.pulse2.freq = 1789773  / (16 * (double)(APU.pulse2.timer+1));
-		}
-		else if (mAddr == 0x4007){
-			APU.pulse2.timer = (APU.pulse2.timer&0xFF) + ((value&0x7)*0x100);
-			APU.pulse2.freq = 1789773  / (16 * (double)(APU.pulse2.timer+1));
-			APU.pulse2.lenCounter = APU.lenCounterLookup[(value&0xF8)>>3];
-			APU.pulse2.seqMask = 1;
-			APU.pulse2.seqOffset = 0;
-			APU.pulse2.envelopeStart = true;
-		}
-		//Triangle
-		else if (mAddr == 0x4008){
-			APU.triangle.linControl = value&0x80;
-			APU.triangle.linReloadVal = value&0x7F;
-		}
-		else if (mAddr == 0x400A){
-			APU.triangle.timer = (APU.triangle.timer&0x700) + (value&0xFF);
-			APU.triangle.freq = 1789773  / (32 * (double)(APU.triangle.timer+1));
-		}
-		else if (mAddr == 0x400B){
-			APU.triangle.timer = (APU.triangle.timer&0xFF) + ((value&0x7)*0x100);
-			APU.triangle.freq = 1789773  / (32 * (double)(APU.triangle.timer+1));
-			APU.triangle.lengthCounter = APU.lenCounterLookup[(value&0xF8)>>3];
-			APU.triangle.linReloadFlag = true;
-		}
-		//Noise
-		else if (mAddr == 0x400C){
-			APU.noise.envelopeLoop = value&0x20;
-			APU.noise.constantVolume = value&0x10;
-			APU.noise.volume = value&0x0F;
-		}
-		else if (mAddr == 0x400E){
-			APU.noise.mode = value&0x80;
-			APU.noise.period = value&0x0F;
-		}
-		else if (mAddr == 0x400F){
-			APU.noise.lenCounter = APU.lenCounterLookup[(value&0xF8)>>3];
-			APU.noise.envelopeStart = true;
-		}
-		//APU enable
-		else if (mAddr == 0x4015)
-			APU.setChannelEnables(value);
-		else if (mAddr == 0x4016)
-			CONTRL.pollController(value,0);
-		else if (mAddr == 0x4017){
-			APU.frameCounter.mode = value&0x80;
-			APU.frameCounter.irqFlag = value&0x40;
-		}
-		
-		memory[addr] = value;
-		memory[mAddr] = value;
 }
 
 void NES::saveState(){

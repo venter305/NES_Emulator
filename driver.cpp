@@ -27,71 +27,86 @@ vector<Button*> buttons;
 string filePath;
 bool paused = false;
 bool debugging = false;
+
 int APP_WIDTH = 256*2;
 int APP_HEIGHT = 240*2+20;
 
-Panel *gameScreen;
-Panel *menuBar;
+//Panel *gameScreen;
+//Panel *menuBar;
 
 void renderGame(Panel*);
 void renderMenuBar(Panel,Button,GLuint);
 
-//Keyboard Callback
-static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods){
-	switch (key){
-		case GLFW_KEY_Z:
-			if (action == GLFW_PRESS) n.CONTRL.buttons_p1 |= 0b00000001;
-			else if(action == GLFW_RELEASE) n.CONTRL.buttons_p1 &= 0b11111110;
+void OnEvent(Event &ev){
+	switch (ev.GetType()){
+		case Event::Key:
+			{
+				int keyCode = static_cast<KeyEvent*>(&ev)->GetKeyCode();
+				int keyState = static_cast<KeyEvent*>(&ev)->GetKeyState();
+
+
+				switch (keyCode){
+					case GLFW_KEY_Z:
+						if (keyState == KeyEvent::KeyState::Pressed) n.CONTRL.buttons_p1 |= 0b00000001;
+						else if(keyState == KeyEvent::KeyState::Released) n.CONTRL.buttons_p1 &= 0b11111110;
+						break;
+					case GLFW_KEY_X:
+						if (keyState == KeyEvent::KeyState::Pressed) n.CONTRL.buttons_p1 |= 0b00000010;
+						else if(keyState == KeyEvent::KeyState::Released) n.CONTRL.buttons_p1 &= 0b11111101;
+						break;
+					case GLFW_KEY_A:
+						if (keyState == KeyEvent::KeyState::Pressed) n.CONTRL.buttons_p1 |= 0b00000100;
+						else if(keyState == KeyEvent::KeyState::Released) n.CONTRL.buttons_p1 &= 0b11111011;
+						break;
+					case GLFW_KEY_S:
+						if (keyState == KeyEvent::KeyState::Pressed) n.CONTRL.buttons_p1 |= 0b00001000;
+						else if(keyState == KeyEvent::KeyState::Released) n.CONTRL.buttons_p1 &= 0b11110111;
+						break;
+					case GLFW_KEY_UP:
+						if (keyState == KeyEvent::KeyState::Pressed) n.CONTRL.buttons_p1 |= 0b00010000;
+						else if(keyState == KeyEvent::KeyState::Released) n.CONTRL.buttons_p1 &= 0b11101111;
+						break;
+					case GLFW_KEY_DOWN:
+						if (keyState == KeyEvent::KeyState::Pressed) n.CONTRL.buttons_p1 |= 0b00100000;
+						else if(keyState == KeyEvent::KeyState::Released) n.CONTRL.buttons_p1 &= 0b11011111;
+						break;
+					case GLFW_KEY_LEFT:
+						if (keyState == KeyEvent::KeyState::Pressed) n.CONTRL.buttons_p1 |= 0b01000000;
+						else if(keyState == KeyEvent::KeyState::Released)n.CONTRL.buttons_p1 &= 0b10111111;
+						break;
+					case GLFW_KEY_RIGHT:
+						if (keyState == KeyEvent::KeyState::Pressed) n.CONTRL.buttons_p1 |= 0b10000000;
+						else if(keyState == KeyEvent::KeyState::Released) n.CONTRL.buttons_p1 &= 0b01111111;
+				}
+				break;
+			}
+
+		case Event::Character:
+		{
+			int charCode = static_cast<CharEvent*>(&ev)->GetCharCode();
 			break;
-		case GLFW_KEY_X:
-			if (action == GLFW_PRESS) n.CONTRL.buttons_p1 |= 0b00000010;
-			else if(action == GLFW_RELEASE) n.CONTRL.buttons_p1 &= 0b11111101;
+		}
+
+		case Event::MouseButton:
+		{
+			MouseButtonEvent::ButtonType btnType = static_cast<MouseButtonEvent*>(&ev)->GetButtonType();
+			MouseButtonEvent::ButtonState btnState = static_cast<MouseButtonEvent*>(&ev)->GetButtonState();
+		  double mouseX = static_cast<MouseButtonEvent*>(&ev)->GetMouseX();
+			double mouseY = static_cast<MouseButtonEvent*>(&ev)->GetMouseY();
+
+			if(btnType == MouseButtonEvent::ButtonType::Left && btnState == MouseButtonEvent::ButtonState::Pressed){
+
+				for (int i=200;i<=204;i++){
+					std::static_pointer_cast<Panel>(GraphicsEngine::guiMan.elements[i])->clickAction(mouseX,mouseY);
+				}
+			}
 			break;
-		case GLFW_KEY_A:
-			if (action == GLFW_PRESS) n.CONTRL.buttons_p1 |= 0b00000100;
-			else if(action == GLFW_RELEASE) n.CONTRL.buttons_p1 &= 0b11111011;
-			break;
-		case GLFW_KEY_S:
-			if (action == GLFW_PRESS) n.CONTRL.buttons_p1 |= 0b00001000;
-			else if(action == GLFW_RELEASE) n.CONTRL.buttons_p1 &= 0b11110111;
-			break;
-		case GLFW_KEY_UP:
-			if (action == GLFW_PRESS) n.CONTRL.buttons_p1 |= 0b00010000;
-			else if(action == GLFW_RELEASE) n.CONTRL.buttons_p1 &= 0b11101111;
-			break;
-		case GLFW_KEY_DOWN:
-			if (action == GLFW_PRESS) n.CONTRL.buttons_p1 |= 0b00100000;
-			else if(action == GLFW_RELEASE) n.CONTRL.buttons_p1 &= 0b11011111;
-			break;
-		case GLFW_KEY_LEFT:	
-			if (action == GLFW_PRESS) n.CONTRL.buttons_p1 |= 0b01000000;
-			else if(action == GLFW_RELEASE)n.CONTRL.buttons_p1 &= 0b10111111;
-			break;
-		case GLFW_KEY_RIGHT:
-			if (action == GLFW_PRESS) n.CONTRL.buttons_p1 |= 0b10000000;
-			else if(action == GLFW_RELEASE) n.CONTRL.buttons_p1 &= 0b01111111;
-			break;
-	};
+		}
+	}
 }
 
 static void char_callback(GLFWwindow *window, unsigned int codepoint){
 	filePath += (char)codepoint;
-}
-
-//Mouse Button
-void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
-{
-    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS){
-			double xPos, yPos;
-			glfwGetCursorPos(window,&xPos,&yPos);
-			int windowX,windowY;
-			glfwGetWindowSize(window,&windowX,&windowY);
-			yPos = windowY-yPos;
-    	for (Button *b : buttons){
-				if (xPos >= b->xPos && xPos <= (b->xPos+b->width) && yPos >= b->yPos && yPos <= (b->yPos+b->height))
-					b->action(b);
-			}	
-		}
 }
 
 //Open new rom
@@ -103,11 +118,8 @@ void openButtonAction(Button *b){
 	glEnable(GL_TEXTURE_2D);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
+	//
 	glViewport(0,0,dialogX,dialogY);
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	gluOrtho2D(0.0,dialogX,0.0,dialogY);
 
 	int windowPosX,windowPosY;
 	glfwGetWindowPos(n.window,&windowPosX,&windowPosY);
@@ -116,68 +128,49 @@ void openButtonAction(Button *b){
 	glfwGetWindowSize(n.window,&windowX,&windowY);
 	glfwSetWindowPos(window,windowPosX+((windowX-dialogX)/2),windowPosY+((windowY-dialogY)/2));
 
-	GLuint fbo;
-	GLuint tex;
-	glGenFramebuffers(1,&fbo);
-	glBindFramebuffer(GL_FRAMEBUFFER,fbo);
-	glGenTextures(1,&tex);
-	glBindTexture(GL_TEXTURE_2D,tex);
-	glTexImage2D(GL_TEXTURE_2D,0,GL_RGB,dialogX,dialogY,0,GL_RGB,GL_UNSIGNED_BYTE,NULL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,tex,0);
-	glBindTexture(GL_TEXTURE_2D,0);
 
-	int currViewport[4];
-	glGetIntegerv(GL_VIEWPORT,currViewport);
-	glViewport(0,0,dialogX,dialogY);
-	
-	
-	glColor3f(.9,.9,.9);
-	glRecti(0,0,dialogX,dialogY);
-	Text label(0,(dialogY-15)/2,15,"Path to Rom:","/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf");
-	label.draw();
-	TextInput fileEntry(label.width,(dialogY-17)/2,dialogX-label.width,17);
-	fileEntry.draw();
+	 Panel fileInput(0,0,dialogX,dialogY);
+	// fileInput.setColor(0.9f,0.9f,0.9f,1.0f);
 
-	glBindFramebuffer(GL_FRAMEBUFFER,0);
-	glViewport(currViewport[0],currViewport[1],currViewport[2],currViewport[3]);
-	
-	Panel fileInput(0,0,dialogX,dialogY);
-	fileInput.setTexture(tex);
-	fileInput.draw();
+	//Text label(0,(dialogY-15)/2,15,"Path to Rom:","/usr/share/fonts/TTF/DejaVuSerif.ttf");
+
+	//TextInput fileEntry(label.width,(dialogY-17)/2,dialogX-label.width,17);
+
+
+
 	glfwSetCharCallback(window,char_callback);
 	int deleteChar = true;
+
+	paused = true;
 	while (!glfwGetKey(window,GLFW_KEY_ENTER)){
 		if (glfwWindowShouldClose(window)){
-			glfwDestroyWindow(window);
-			glfwMakeContextCurrent(n.window);
 			return;
-		};
+		}
 		glfwPollEvents();
 		if (glfwGetKey(window,GLFW_KEY_BACKSPACE) && deleteChar){
 			deleteChar = false;
 			if (filePath.length() > 0)filePath.pop_back();
 		}
-		
+
 		if (!glfwGetKey(window,GLFW_KEY_BACKSPACE))
 			deleteChar = true;
-		
-		glBindFramebuffer(GL_FRAMEBUFFER,fbo);
-		glViewport(0,0,dialogX,dialogY);
-		fileEntry.text->setText(filePath);
-		fileEntry.drawText();
-		fileEntry.draw();
-		glBindFramebuffer(GL_FRAMEBUFFER,0);
-		glViewport(currViewport[0],currViewport[1],currViewport[2],currViewport[3]);
-		fileInput.draw();
-		glFlush();
+
+		//fileInput.draw();
+
+		//label.draw();
+
+		//fileEntry.text->setText(filePath);
+		//fileEntry.draw();
+
 		glfwSwapBuffers(window);
 	}
-	glfwSetCharCallback(window,NULL);
-	glfwMakeContextCurrent(n.window);
+	//glfwSetCharCallback(window,NULL);
 	glfwDestroyWindow(window);
+	glfwMakeContextCurrent(GraphicsEngine::window);
+	glViewport(0,0,APP_WIDTH,APP_HEIGHT);
+
 	ifstream f;
+  filePath = "zelda.nes";
 	f.open(filePath);
 	if (f){
 		f.close();
@@ -185,16 +178,16 @@ void openButtonAction(Button *b){
 		n.CART.readRom(filePath);
 		n.CPU.reset();
 	}
+
+	paused = false;
 }
 
 //Pause emulation
 void pauseButtonAction(Button *b){
 	if (!paused)
-		b->text->setText("Resume");
+		b->setText("Resume");
 	else
-		b->text->setText("Pause");
-	b->drawText();
-	b->draw();
+		b->setText("Pause");
 	paused = !paused;
 }
 
@@ -216,11 +209,11 @@ void debug_window_close_callback(GLFWwindow *window){
 
 //Start Debugger
 void debugButtonAction(Button *b){
-	glfwShowWindow(d->window);	
+	glfwShowWindow(d->window);
 	debugging = true;
 }
 
-//Resize window 
+//Resize window
 void window_size_callback(GLFWwindow* window, int width, int height){
 	glViewport(0,0,width,height);
 	glMatrixMode(GL_PROJECTION);
@@ -230,113 +223,122 @@ void window_size_callback(GLFWwindow* window, int width, int height){
 	APP_HEIGHT = height;
 }
 
-void loop(){
+void renderLoop(GLFWwindow *window,double dtime){
 	if (paused == false){
-		//run next instruction
-		while(!n.PPU.frameComplete){
-			//if (n.APU.soundMan->samplesNeeded)
-				n.clock(1);
-		}
-		//frame is done rendering
-		n.PPU.frameComplete = false;
-		//render game screen and menud
-		renderGame(gameScreen);
+		//Update Game Screen
+		auto gameScreen = std::static_pointer_cast<Panel>(GraphicsEngine::guiMan.elements[100]);
+		gameScreen->UpdateTexture(0,0,256,240,GL_RGB,GL_UNSIGNED_BYTE,n.PPU.pixelVal);
+
 		if (debugging)
 			d->display();
 	}
-	menuBar->draw();
-	for (Button *b : buttons)
-		b->draw();
+
+	GraphicsEngine::guiMan.drawElements();
+}
+
+uint8_t soundLoop (){
+	if (!paused){
+		while(!n.clock(1) && !paused){};
+	}
+
+	return n.APU.output;
+
 }
 
 int main(int argc, char** argv) {
 
 	//Read Rom
-	n.CART.readRom("Tetris.nes");
-	
+	n.CART.readRom("SMB.nes");
+
 	n.CPU.reset();
 
 	SoundManager soundMan;
 	n.APU.soundMan = &soundMan;
+	soundMan.UserFunc = soundLoop;
 
-	//Open Window, Set up Callback functions
-	GraphicsEngine graphicsEngine(APP_WIDTH,APP_HEIGHT,"Nes Emulator");
-	if (graphicsEngine.window == NULL)
+	//Open Window
+	GraphicsEngine::Init(APP_WIDTH,APP_HEIGHT,"Nes Emulator",renderLoop);
+	if (GraphicsEngine::window == NULL)
 		return 0;
-	n.window = graphicsEngine.window;
-	glfwSetKeyCallback(graphicsEngine.window,key_callback);
-	glfwSetMouseButtonCallback(graphicsEngine.window, mouse_button_callback);
-	glfwSetWindowSizeCallback(graphicsEngine.window, window_size_callback);
 
-	d = new Debugger();
-	d->n = &n;
-	glfwSetWindowCloseCallback(d->window,debug_window_close_callback);
-	
-	glViewport(0,0,APP_WIDTH,APP_HEIGHT);
+	n.window = GraphicsEngine::window;
 
 	//Game Screen panel
-  gameScreen = new Panel(0,0,APP_WIDTH,APP_HEIGHT-20);
-	gameScreen->genTexture(256,240);
+  std::shared_ptr<Panel> gameScreen = std::make_shared<Panel>(0,0,APP_WIDTH,APP_HEIGHT-20);
+	gameScreen->CreateTexture(256,240,GL_RGB,GL_UNSIGNED_BYTE,nullptr);
+	glBindTexture(GL_TEXTURE_2D,gameScreen->tex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	gameScreen->flipY();
+	GraphicsEngine::guiMan.addElement(gameScreen,100);
 
 	//Menu and buttons
-	menuBar = new Panel(0,APP_HEIGHT-20,APP_WIDTH,20);
-	menuBar->setColor(.9,.9,.9);
-	
-	string fontPath = "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf";	
+	std::shared_ptr<Panel> menuBar = std::make_shared<Panel>(0,APP_HEIGHT-20,APP_WIDTH,20);
+	menuBar->setColor(.9,.9,.9,1);
+	GraphicsEngine::guiMan.addElement(menuBar,101);
+
+
+	string fontPath = "/usr/share/fonts/TTF/DejaVuSerif.ttf";
 	//Open
-	Button openButton(5,APP_HEIGHT-18,36,15,openButtonAction);
-	openButton.text->setText("Open");
-	openButton.setBackgroundColor(.9,.9,.9);
-	openButton.drawText();
-	buttons.push_back(&openButton);
+	std::shared_ptr<Button> openButton = std::make_shared<Button>(5,APP_HEIGHT-18,36,15,openButtonAction);
+	openButton->setText("Open");
+	openButton->setBackgroundColor(.9,.9,.9);
+	GraphicsEngine::guiMan.addElement(openButton,200);
+
 	//Pause
-	Button pauseButton(50,APP_HEIGHT-18,50,15, pauseButtonAction);
-	pauseButton.text->setText("Pause");
-	pauseButton.setBackgroundColor(.9,.9,.9);
-	pauseButton.drawText();
-	buttons.push_back(&pauseButton);	
+	std::shared_ptr<Button> pauseButton = std::make_shared<Button>(50,APP_HEIGHT-18,50,15, pauseButtonAction);
+	pauseButton->setText("Pause");
+	pauseButton->setBackgroundColor(.9,.9,.9);
+	GraphicsEngine::guiMan.addElement(pauseButton,201);
+
 	//Save State
-	Button saveStateButton(110,APP_HEIGHT-18,70,15, saveStateAction);
-	saveStateButton.text->setText("Save State");
-	saveStateButton.setBackgroundColor(.9,.9,.9);
-	saveStateButton.drawText();
-	buttons.push_back(&saveStateButton);
+	std::shared_ptr<Button> saveStateButton = std::make_shared<Button>(110,APP_HEIGHT-18,70,15, saveStateAction);
+	saveStateButton->setText("Save State");
+	saveStateButton->setBackgroundColor(.9,.9,.9);
+	GraphicsEngine::guiMan.addElement(saveStateButton,202);
+
 	//Load State
-	Button loadStateButton(200,APP_HEIGHT-18,70,15, loadStateAction);
-	loadStateButton.text->setText("Load State");
-	loadStateButton.setBackgroundColor(.9,.9,.9);
-	loadStateButton.drawText();
-	buttons.push_back(&loadStateButton);
+	std::shared_ptr<Button> loadStateButton = std::make_shared<Button>(200,APP_HEIGHT-18,70,15, loadStateAction);
+	loadStateButton->setText("Load State");
+	loadStateButton->setBackgroundColor(.9,.9,.9);
+	GraphicsEngine::guiMan.addElement(loadStateButton,203);
+
 	//Debugging
-	Button debugButton(280,APP_HEIGHT-18,70,15, debugButtonAction);
-	debugButton.text->setText("Debugger");
-	debugButton.setBackgroundColor(.9,.9,.9);
-	debugButton.drawText();
-	buttons.push_back(&debugButton);
+	std::shared_ptr<Button> debugButton = std::make_shared<Button>(280,APP_HEIGHT-18,70,15, debugButtonAction);
+	debugButton->setText("Debugger");
+	debugButton->setBackgroundColor(.9,.9,.9);
+	GraphicsEngine::guiMan.addElement(debugButton,204);
 
 	//glfwSwapInterval(0);
-	graphicsEngine.mainLoop = loop;
-	graphicsEngine.run();
-	
-	delete gameScreen;
-	delete menuBar;
+	GraphicsEngine::input.onEvent = OnEvent;
+	GraphicsEngine::Run();
 
-	glUnmapBuffer(GL_ARRAY_BUFFER);
+	//glUnmapBuffer(GL_ARRAY_BUFFER);
 	glfwTerminate();
 	return 0;
 }
 
 //Draw game screen
 void renderGame(Panel *p){
-	glViewport(0,0,256,240);
-	glBindFramebuffer(GL_FRAMEBUFFER,p->fbo);
-	glRasterPos2i(0,0);	
-	glDrawPixels(256,240,GL_RGB,GL_UNSIGNED_BYTE,n.PPU.pixelVal);
-	
-	glBindFramebuffer(GL_FRAMEBUFFER,0);
-	
-	glViewport(0,0,APP_WIDTH,APP_HEIGHT);
+	// glViewport(0,0,256,240);
+	// glBindFramebuffer(GL_FRAMEBUFFER,p->fbo);
+	// glRasterPos2i(0,0);
+	// GLbyte texData[240][256][3];
+	// for (int y=0;y < 240;y++)
+	// 	for(int x=0;x<256;x++){
+	// 		texData[y][x][0] = 255;
+	// 		texData[y][x][1] = 0;
+	// 		texData[y][x][2] = 0;
+	// 	}
+	//
+	//
+	// glDrawPixels(256,240,GL_RGB,GL_UNSIGNED_BYTE,texData);
+	// //glDrawPixels(256,240,GL_RGB,GL_UNSIGNED_BYTE,n.PPU.pixelVal);
+	//
+	// glBindFramebuffer(GL_FRAMEBUFFER,0);
+	//
+	// glViewport(0,0,APP_WIDTH,APP_HEIGHT);
+	glBindTexture(GL_TEXTURE_2D,p->tex);
+	glTexSubImage2D(GL_TEXTURE_2D,0,0,0,256,240,GL_RGB,GL_UNSIGNED_BYTE,n.PPU.pixelVal);
 	p->draw();
 }
-

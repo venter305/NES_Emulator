@@ -1,0 +1,4 @@
+*.o
+emu
+Roms/*.nes
+Roms/*.NES

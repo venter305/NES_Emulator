@@ -1,0 +1,15 @@
+#version 450 core
+out vec4 FragColor;
+
+in vec3 color;
+in vec2 texCoord;
+
+uniform sampler2D textureData;
+uniform vec3 textureColor;
+
+void main(){
+	if (texture(textureData,texCoord).a < 1)
+		discard;
+	FragColor = texture(textureData,texCoord)*vec4(color,1);
+}
+

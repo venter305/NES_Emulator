@@ -31,23 +31,31 @@ void cartridge::reset() {
 };
 
 //Read a Rom from a file
-void cartridge::readRom(string fileName){
+bool cartridge::readRom(string fileName){
 	//File input
 	ifstream rom;
 	rom.open(fileName, ios::binary);
-	
+
+	if (!rom)
+		return false;
+
 	name = fileName;
-			
+
 	//Read Header
 	uint8_t tmp[16];
 	rom.read((char *)&tmp,16);
 	header.write(tmp);
-	
+
+	std::string headerTest;
+	headerTest.insert(0,(char*)header.data,3);
+	if(headerTest.compare("NES"))
+		return false;
+
 	ntMirrorMode = (header.MIRROR)?1:2;
-	
+
 	//Load Mapper
 	switch(header.lMAPPER +(header.hMAPPER*0x10)){
-		case 0: 
+		case 0:
 			Mapper = new mapper_000(header.sPRGROM,header.sCHRROM);
 			break;
 		case 1:
@@ -58,7 +66,7 @@ void cartridge::readRom(string fileName){
 			Mapper = new mapper_002(header.sPRGROM,header.sCHRROM);
 			break;
 	}
-	
+
 	//Load PRG ROM
 	int prg_rom = 0;
 	prg_size = 0x4000*header.sPRGROM+(0x2000*header.PRGRAM);
@@ -72,7 +80,7 @@ void cartridge::readRom(string fileName){
 		prgMemory[prg_rom] = (int)(unsigned char)x;
 		prg_rom++;
 	}
-	
+
   //Load CHR ROM/RAM
 	//RAM
 	if (header.sCHRROM == 0){
@@ -95,6 +103,8 @@ void cartridge::readRom(string fileName){
 	}
 
 	loadGame();
+
+	return true;
 }
 
 //Write to cartridge
@@ -128,7 +138,7 @@ int cartridge::readChrMem(int addr){
 int cartridge::getMirrorMode(){
 	if (Mapper->getNtMirrorMode() != -1)
 		ntMirrorMode = Mapper->getNtMirrorMode();
-	
+
 	return ntMirrorMode;
 }
 
@@ -137,19 +147,19 @@ void cartridge::saveGame(){
 	//Return if there is no save data
 	if (!(header.PRGRAM))
 		return;
-	
+
 	//Set up output file
 	ofstream saveFile;
 	string fileName = "./Saves/"+name;
 	fileName.replace(fileName.end()-3,fileName.end(),"sav");
 	saveFile.open(fileName,ios::binary);
-	
+
 	//Write to file
 	for (int i=0x6000;i<0x8000;i++){
 		char x = nes->readMemory(i);
 		saveFile.write(&x,1);
 	}
-	
+
 	saveFile.close();
 }
 
@@ -166,7 +176,7 @@ void cartridge::loadGame(){
 	saveFile.open(fileName,ios::binary);
 	if (!saveFile)
 		return;
-	
+
 	//Read from file
 	for (int i=0x6000;i<0x8000;i++){
 		char x;
@@ -175,5 +185,5 @@ void cartridge::loadGame(){
 	}
 
 	saveFile.close();
-		
+
 }

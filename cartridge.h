@@ -14,7 +14,7 @@ class cartridge{
 		int *chrMemory;
 		int *prgMemory;
 
-		//Header 
+		//Header
 		struct HEADER{
 			uint8_t data[16];
 			uint8_t test = 0;							//Size of PRG ROM
@@ -34,29 +34,29 @@ class cartridge{
 			uint8_t FLAGS8 = 0;								//Size of PRG RAM
 			uint8_t FLAGS9 = 0;								//Flags 9
 			bool TV = 0;								//Tv system
-			
+
 			void write(uint8_t d[16]){
 				for (int i=0;i<16;i++)
 					data[i] = d[i];
-				sPRGROM = data[4];						
-				sCHRROM = data[5];							
-				FLAGS6 = data[6];								
-				MIRROR = data[6]&0x1;						
-				PRGRAM = (data[6]&0x2) >> 1;			
-				TRAINER = (data[6]&0x4) >> 2;			
-				mIGNORE = (data[6]&0x8) >> 3;			
-				lMAPPER = (data[6]&0xF0) >> 4;		
-				FLAGS7 = data[7];								
-				VSUNI = data[7]&0x1;						
-				PC10 = (data[7]&0x2) >> 1;				
-				NES2 = (data[7]&0xC) >> 2;				
-				hMAPPER = (data[7]&0xF0) >> 4;		
-				FLAGS8 = data[8];								
-				FLAGS9 = data[9];								
-				TV = data[9]&0x1;								
+				sPRGROM = data[4];
+				sCHRROM = data[5];
+				FLAGS6 = data[6];
+				MIRROR = data[6]&0x1;
+				PRGRAM = (data[6]&0x2) >> 1;
+				TRAINER = (data[6]&0x4) >> 2;
+				mIGNORE = (data[6]&0x8) >> 3;
+				lMAPPER = (data[6]&0xF0) >> 4;
+				FLAGS7 = data[7];
+				VSUNI = data[7]&0x1;
+				PC10 = (data[7]&0x2) >> 1;
+				NES2 = (data[7]&0xC) >> 2;
+				hMAPPER = (data[7]&0xF0) >> 4;
+				FLAGS8 = data[8];
+				FLAGS9 = data[9];
+				TV = data[9]&0x1;
 				}
 		} header;
-		
+
 		//Info
 		int prg_size;
 		int chr_size;
@@ -66,16 +66,16 @@ class cartridge{
 			2: Horizontal
 		*/
 		int ntMirrorMode;
-	
+
 		std::string name;
 		mapper *Mapper;
 
 		NES *nes;
-		
+
 		cartridge();
 		~cartridge();
 		void reset();
-		void readRom(std::string);
+		bool readRom(std::string);
 		int readPrgMem(int);
 		int readChrMem(int);
 		void cartWrite(int,int);
@@ -84,7 +84,7 @@ class cartridge{
 		void saveGame();
 		void loadGame();
 
-		
+
 };
 
 #endif

@@ -1,29 +1,44 @@
-_OBJ=$(patsubst %.cpp,%.o,$(wildcard *.cpp)) $(patsubst %.cpp,%.o,$(wildcard GraphicsEngine/*.cpp))  $(patsubst %.cpp,%.o,$(wildcard GraphicsEngine/GUI/*.cpp)) $(patsubst %.cpp,%.o,$(wildcard Mappers/*.cpp)) $(patsubst %.cpp,%.o,$(wildcard SoundManager/*.cpp)) $(patsubst %.cpp,%.o,$(wildcard Input/*.cpp))
+
+define IncludePaths
+GraphicsEngine
+GraphicsEngine/GUI
+GraphicsEngine/GUI/Layout
+GraphicsEngine/Input
+SoundManager
+Mappers
+endef
+
+_OBJ=$(patsubst %.cpp,%.o,$(wildcard *.cpp)) $(foreach dir,$(IncludePaths),$(patsubst %.cpp,%.o,$(wildcard $(dir)/*.cpp)))
+
 OBJ=$(patsubst %,./obj/%,$(_OBJ))
 
-IPATHS=-I/usr/include/freetype2
-FLAGS= -lpulse-simple -lpulse
+INCLUDE=-I./eigen -I/usr/include/freetype2
+
+LFLAGS=-lGLEW -lglfw -lGL -lfreetype -lpulse-simple -lpulse
+
+CXXFLAGS= $(LFLAGS) $(INCLUDE)
 
 emu: $(OBJ)
-	g++ $(OBJ) -o emu -lglut -lGL -lGLU -pthread -lglfw -lGLEW -lfreetype $(IPATHS) $(FLAGS)
-
-obj/SoundManager/soundManager.o: ./SoundManager/soundManager.cpp ./SoundManager/soundManager.h
-	g++ -c -o ./obj/SoundManager/soundManager.o ./SoundManager/soundManager.cpp $(IPATHS) $(FLAGS)
-
-obj/%.o: %.cpp %.h
-	g++ -c -o $@ $< $(IPATHS) $(FLAGS) -O
-
-obj/%.o: %.cpp
-	g++ -c -o $@ $< $(IPATHS) $(FLAGS)
-
-obj/%.o: %.h
-	g++ -c -o $@ $< $(IPATHS) $(FLAGS)
+	g++ $(OBJ) -o emu $(CXXFLAGS)
 
 
 init:
-	mkdir -p obj  obj/GraphicsEngine obj/GraphicsEngine/GUI obj/Mappers obj/SoundManager obj/Input
+	mkdir -p obj obj/dep $(foreach dir,$(IncludePaths),obj/$(dir))  $(foreach dir,$(IncludePaths),obj/dep/$(dir))
 	mkdir -p SaveStates
-	mkdir -p Saves/
+	mkdir -p Saves
 
 clean:
-	rm -f ./obj/*.o ./obj/GraphicsEngine/*.o ./obj/GraphicsEngine/GUI/*.o ./obj/Mappers/*.o ./obj/SoundManager/*.o ./obj/Input/*.o emu
+	rm -f ./gtest ./obj/*.o ./obj/dep/*.d $(foreach dir,$(IncludePaths),obj/$(dir)/*.o) $(foreach dir,$(IncludePaths),obj/dep/$(dir)/*.d)
+
+./obj/dep/%.d: %.cpp
+	@rm -f $@
+	@g++ -MM $< $(CXXFLAGS) > $@.tmp
+	@sed 's,\($(@F:.d=.o)\)[ :]*,$(patsubst obj/dep/%.d,./obj/%.o,$@) :,g' < $@.tmp > $@
+	@sed -i '$$a \\tg++ -c $< -o $(patsubst obj/dep/%.d,./obj/%.o,$@) $(CXXFLAGS)' $@
+	@rm -f $@.tmp
+
+ifneq ($(MAKECMDGOALS),clean)
+ifneq ($(MAKECMDGOALS),init)
+-include $(patsubst %,./obj/dep/%,$(_OBJ:.o=.d))
+endif
+endif

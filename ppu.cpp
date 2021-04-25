@@ -27,7 +27,7 @@ ppu::ppu(){
 	pallet[0x01] = new GLubyte[3] {0,30,116};
 	pallet[0x02] = new GLubyte[3] {8,16,144};
 	pallet[0x03] = new GLubyte[3] {48,0,136};
-	pallet[0x04] = new GLubyte[3] {68,0,100};	
+	pallet[0x04] = new GLubyte[3] {68,0,100};
 	pallet[0x05] = new GLubyte[3] {92,0,48};
 	pallet[0x06] = new GLubyte[3] {84,4,0};
 	pallet[0x07] = new GLubyte[3] {60,24,0};
@@ -106,7 +106,7 @@ void ppu::reset(){
 	bgShiftReg8[1] = 0;
 	bgLatch[0] = 0;
 	bgLatch[1] = 0;
-	
+
 	//Sprite
 	for (int i=0;i<8;i++){
 		sShiftReg8_1[i] = 0;
@@ -114,26 +114,26 @@ void ppu::reset(){
 		sLatch[i] = 0;
 		sCount[i] = 0;
 	}
-	
+
 	//Counters
 	cycles = 30;
 	scanlines = 0;
 	currScanline = 0;
 	tmpScanline = 0;
 	frames = 1;
-	
+
 	//Registers
 	v = 0;
 	t = 0;
 	x = 0;
 	w = 0;
 	vBuffer = 0;
-	
+
 	//Flags
 	frameComplete = false;
 	s0Hit = false;
 	vBlank = false;
-	
+
 }
 
 void ppu::runCycles(int c){
@@ -145,7 +145,7 @@ void ppu::runCycles(int c){
 	while(tmpCycles > 0){
 		cycles++;
 		int bgPatternAddr = (*ppuReg2000&0x10)*0x100;
-		
+
 		//Prerender scanline
 		if (scanlines == -1){
 			//Set up Background rendering
@@ -154,15 +154,15 @@ void ppu::runCycles(int c){
 				frameComplete = false;
 				//Reset Sprite 0
 				nes->writeMemory(0x2002, *ppuReg2002 & 0b10111111);
-				
+
 				//Set up Background Registers
-				
+
 				bgShiftReg16[0] = nes->PPURead(chrAddr);
 				bgShiftReg16[1] = nes->PPURead(chrAddr+8);
-			
+
 				bgShiftReg16[0] += (nes->PPURead(chrAddr1)*0x100);
-				bgShiftReg16[1] += (nes->PPURead(chrAddr1+8)*0x100);	
-			
+				bgShiftReg16[1] += (nes->PPURead(chrAddr1+8)*0x100);
+
 				bgShiftReg8[0] = (((0b10<<(2*attrQuad1)) & nes->PPURead(attrAddr1))>0)*0xFF;
 			bgShiftReg8[1] = (((0b01<<(2*attrQuad1)) & nes->PPURead(attrAddr1))>0)*0xFF;
 
@@ -195,18 +195,18 @@ void ppu::runCycles(int c){
 			if ((*ppuReg2001 & 0x18)){
 				//Rendering cycles
 				if (cycles >= 1 && cycles <= 256) {
-					//Draw 
+					//Draw
 					drawPixel();
-					
+
 					//Every 8 cycles
 					if (cycles%8 == 0){
 						//Load Background registers
-					
+
 						bgShiftReg16[0] &= 0xFF00;
 						bgShiftReg16[0] += (nes->PPURead(nes->PPURead(ntAddr)*0x10+bgPatternAddr+((v&0x7000)/0x1000)));
 						bgShiftReg16[1] &= 0xFF00;
 						bgShiftReg16[1] += (nes->PPURead(nes->PPURead(ntAddr)*0x10+bgPatternAddr+8+((v&0x7000)/0x1000)));
-						
+
 						bgLatch[0] = (((0b10<<(2*attrQuad)) & nes->PPURead(attrAddr))>0);
 						bgLatch[1] = (((0b01<<(2*attrQuad)) & nes->PPURead(attrAddr))>0);
 					}
@@ -238,7 +238,7 @@ void ppu::runCycles(int c){
 				else if (cycles == 257){
 					//Copy vertical bits from t to v
 					nes->writeMemory(0x2003, 0);
-			  
+
 					v &= (0xFFFF-0x41f);
 					v |= (t & 0x41f);
 					ntAddr = 0x2000 | (v&0x0FFF);
@@ -247,7 +247,7 @@ void ppu::runCycles(int c){
 				attrQuad1 = ((((((v-1)&0x3e0)>>5)%4)/2)<<1) + (((((v-1)&0x1f))%4)/2);
 				chrAddr = (nes->PPURead(ntAddr)*0x10+bgPatternAddr)+((v&0x7000)/0x1000);
 				chrAddr1 = nes->PPURead(ntAddr-1)*0x10+bgPatternAddr+((v&0x7000)/0x1000);
-				
+
 					//Get next scanline Sprite data
 					int tmpSL = scanlines;
 					numSprites = 0;
@@ -283,32 +283,32 @@ void ppu::runCycles(int c){
 								tmpPlane1 = nes->PPURead(palletTable+tileAddr+(tileOffset));
 								tmpPlane2 = nes->PPURead(palletTable+tileAddr+8+(tileOffset));
 							}
-			
+
 							if (OAM[i*4+2]&0x40){
 								tmpPlane1 = (lookup[tmpPlane1&0xf]<<4) | lookup[tmpPlane1>>4];
 								tmpPlane2 = (lookup[tmpPlane2&0xf]<<4) | lookup[tmpPlane2>>4];
 							}
-							
+
 							sShiftReg8_1[numSprites] = tmpPlane1;
 							sShiftReg8_2[numSprites] = tmpPlane2;
-							
+
 							sCount[numSprites] = OAM[i*4+3];
 							sLatch[numSprites] = OAM[i*4+2];
 							numSprites++;
 						}
 					}
-					
+
 					sActiveLatch = 0;
-					
+
 				}
 				//Get background tiles for next scanline
 				else if (cycles == 336){
 					bgShiftReg16[0] = nes->PPURead(chrAddr);
 					bgShiftReg16[1] = nes->PPURead(chrAddr+8);
-			
+
 					bgShiftReg16[0] += (nes->PPURead(chrAddr1)*0x100);
-					bgShiftReg16[1] += (nes->PPURead(chrAddr1+8)*0x100);	
-						
+					bgShiftReg16[1] += (nes->PPURead(chrAddr1+8)*0x100);
+
 					bgShiftReg8[0] = (((0b10<<(2*attrQuad1)) & nes->PPURead(attrAddr1))>0)*0xFF;
 				bgShiftReg8[1] = (((0b01<<(2*attrQuad1)) & nes->PPURead(attrAddr1))>0)*0xFF;
 
@@ -319,10 +319,10 @@ void ppu::runCycles(int c){
 				if ((cycles >= 328 || cycles <= 256) && (cycles%8) == 0){
 					if ((v & 0x001f) == 31){
 						v &= (0xFFFF-0x001f);
-						v ^= 0x0400;	
+						v ^= 0x0400;
 					}
 					else
-						v++; 
+						v++;
 					ntAddr = 0x2000 | (v&0x0FFF);
 					attrAddr = 0x23C0 | (v&0x0C00) | ((v >> 4) & 0x38) | ((v >> 2) & 0x07);
 					attrQuad = (((((v&0x3e0)>>5)%4)/2)<<1) + (((v&0x1f)%4)/2);
@@ -340,13 +340,13 @@ void ppu::runCycles(int c){
 			nes->writeMemory(0x2002, *ppuReg2002 | 0b10000000);
 			frames++;
 			frameComplete = true;
-			
+
 			//Send NMI
 			if (frames >= 2 && (*ppuReg2000 & 0b10000000)){
 				nes->CPU.NMI();
 			}
 		}
-			
+
 		//Reset Vblank
 		else if (scanlines == 260 && tmpScanline != scanlines){
 			tmpScanline = scanlines;
@@ -354,7 +354,7 @@ void ppu::runCycles(int c){
 			nes->writeMemory(0x2002,*ppuReg2002 & 0b01111111);
 			vBlank = false;
 		}
-		
+
 		//Increment scanline
 		if (cycles > 340){
 			cycles = 0;
@@ -363,11 +363,11 @@ void ppu::runCycles(int c){
 			else
 				scanlines = -1;
 		}
-		
-		tmpCycles--;
-	}					
 
-	locked = false;			
+		tmpCycles--;
+	}
+
+	locked = false;
 }*/
 
 //Cycle the PPU
@@ -387,7 +387,7 @@ void ppu::clock(int c){
 	auto incrementX = [&](){
 		if ((v & 0x001f) == 31){
 			v &= (0xFFFF-0x001f);
-			v ^= 0x0400;	
+			v ^= 0x0400;
 		}
 		else
 			v++;
@@ -421,7 +421,7 @@ void ppu::clock(int c){
 				frameComplete = false;
 				//Reset Sprite 0
 				nes->writeMemory(0x2002, *ppuReg2002 & 0b10111111);
-				
+
 				//Set up Background Registers
 			}
 			//Reload the vertical scroll bits
@@ -461,7 +461,7 @@ void ppu::clock(int c){
 						case 7:
 							bgShiftReg16[0] = (bgShiftReg16[0]&0xFF00) | bgPatternLo;
 							bgShiftReg16[1] = (bgShiftReg16[1]&0xFF00) | bgPatternHi;
-							
+
 							bgLatch[0] = (attrByte&0x2)>0;
 							bgLatch[1] = (attrByte&0x1);
 							incrementX();
@@ -512,21 +512,21 @@ void ppu::clock(int c){
 								tmpPlane1 = nes->PPURead(palletTable+tileAddr+(tileOffset));
 								tmpPlane2 = nes->PPURead(palletTable+tileAddr+8+(tileOffset));
 							}
-			
+
 							if (OAM[i*4+2]&0x40){
 								tmpPlane1 = (lookup[tmpPlane1&0xf]<<4) | lookup[tmpPlane1>>4];
 								tmpPlane2 = (lookup[tmpPlane2&0xf]<<4) | lookup[tmpPlane2>>4];
 							}
-							
+
 							sShiftReg8_1[numSprites] = tmpPlane1;
 							sShiftReg8_2[numSprites] = tmpPlane2;
-							
+
 							sCount[numSprites] = OAM[i*4+3];
 							sLatch[numSprites] = OAM[i*4+2];
 							numSprites++;
 						}
 					}
-					
+
 					sActiveLatch = 0;
 				}
 				else if (cycles == 338){
@@ -539,25 +539,25 @@ void ppu::clock(int c){
 
 					bgLatch[0] = (attrByte&0x2)>0;
 					bgLatch[1] = attrByte&0x1;
-							
+
 					bgShiftReg8[0] = bgLatch[0]*0xFF;
 					bgShiftReg8[1] = bgLatch[1]*0xFF;
 				}
 			}
 		}
-		
+
 		else if (scanlines == 241 && (*ppuReg2002 & 0b10000000) == 0 && vBlank == false){
 			vBlank = true;
 			nes->writeMemory(0x2002, *ppuReg2002 | 0b10000000);
 			frames++;
 			frameComplete = true;
-			
+
 			//Send NMI
 			if (frames >= 2 && (*ppuReg2000 & 0b10000000)){
 				nes->CPU.NMI();
 			}
 		}
-			
+
 		//Reset Vblank
 		else if (scanlines == 260 && tmpScanline != scanlines){
 			tmpScanline = scanlines;
@@ -576,9 +576,9 @@ void ppu::clock(int c){
 		}
 
 		tmpCycles--;
-	}					
+	}
 
-	locked = false;			
+	locked = false;
 }
 
 //Draw a Pixel
@@ -590,7 +590,7 @@ void ppu::drawPixel(){
 		int bgAttr1 = 0;
 		int bgAttr2 = 0;
 		int palletAddr = 0;
-		
+
 		//If background is disabled or left hand side is hidden
 		if ((*ppuReg2001&0x8) == 0 || (((*ppuReg2001&2) == 0) && cycles <= 8)){
 				bgPlane1 = 0;
@@ -612,19 +612,19 @@ void ppu::drawPixel(){
 		int sPlane1 = 0;
 		int sPlane2 = 0;
 		int sPallet = 0;
-		
+
 		if (*ppuReg2001&0x10)
 			for (int i=0;i<numSprites;i++){
 				if(sCount[i]-- == 0)
 					sActiveLatch |= (128>>i);
-				
+
 				if (sActiveLatch & (128>>i)){
-					
+
 					sTmpPlane1 = (sShiftReg8_1[i] & 0x80)>0;
 					sTmpPlane2 = (sShiftReg8_2[i] & 0x80)>0 ;
-				
+
 					sTmpPallet = sLatch[i] & 3;
-						
+
 					sShiftReg8_1[i]<<=1;
 					sShiftReg8_2[i]<<=1;
 					if (sTmpPlane1|sTmpPlane2 && ((*ppuReg2001&0x4) || cycles > 8)){
@@ -640,9 +640,9 @@ void ppu::drawPixel(){
 						if (bgPlane1|bgPlane2 && s0Hit && i==0 && !(*ppuReg2002&0x40) && cycles < 256){
 							nes->writeMemory(0x2002, *ppuReg2002 | 0x40);
 							//cout << scanlines << endl;
-						}			
+						}
 					}
-					
+
 				}
 			}
 
@@ -663,248 +663,15 @@ void ppu::drawPixel(){
 		GLubyte colorVal1 = (pallet[palletNum][0]);
 		GLubyte colorVal2 = (pallet[palletNum][1]);
 		GLubyte colorVal3 = (pallet[palletNum][2]);
-		
+
 		pixelVal[scanlines][cycles-1][0] = colorVal1;
 		pixelVal[scanlines][cycles-1][1] = colorVal2;
 		pixelVal[scanlines][cycles-1][2] = colorVal3;
 	}
-	
+
 	//Increment Background registers
 	bgShiftReg16[0] = (bgShiftReg16[0]<<1)&0xFFFF;
 	bgShiftReg16[1] = (bgShiftReg16[1]<<1)&0xFFFF;
 	bgShiftReg8[0] = (bgShiftReg8[0]<<1)+bgLatch[0];
 	bgShiftReg8[1]= (bgShiftReg8[1]<<1)+bgLatch[1];
-}
-
-//Draw Background Nametables
-void ppu::drawBackground(Panel *p){
-	//	Display Nametables
-	int ntAddr = 0x2000;
-	int ntNum = 0;
-	GLubyte outPixels[501][512][3];
-	while (ntAddr < 0x3000){
-		int ntOffsetX = 0;
-		int ntOffsetY = 0;
-		if ((ntAddr >= 0x2400 && ntAddr <= 0x27FF) || ntAddr >= 0x2C00)
-			ntOffsetX = 1;
-		if (ntAddr >= 0x2800)
-			ntOffsetY = 1;
-		int chrAddr = nes->PPURead(ntAddr)*0x10+(nes->readMemory(0x2000)&0x10)*0x100;
-		int plane1[8];
-		int plane2[8];
-		
-		int row = ntNum/32;
-		int colm = ntNum%32;
-		int attrAddr = 0x2300 + ((row/8+0xc)*0x10) + 	((colm/4)+(((row%8)/4)*8));
-		//cout << hex << ntAddr << ' ' << chrAddr << " ";
-	
-		for (int i=0;i<16;i++){
-			if (i < 8)
-				plane1[i] = nes->PPURead(chrAddr+i);
-			else
-				plane2[i-8] = nes->PPURead(chrAddr+i);
-		}	
-		
-		int attrQuad = (((row%4)/2)<<1) + ((colm%4)/2);
-		int palletNum = ((0b11<<(2*attrQuad)) & nes->PPURead(attrAddr))>>(2*attrQuad);
-		//int palletNum = 0;
-		//cout << hex << palletNum << "\n";
-		int palletAddr = 0x3f00;
-		int chrPlane[8];
-		for (int i=0;i<8;i++){
-			chrPlane[i] = plane1[i] | plane2[i];
-		}
-	
-		int pixelSize = 1;
-		glColor3f(1,1,1);
-		int xPos = (ntNum%32)*8*pixelSize;	
-		int yPos = ((ntNum/32)*8*pixelSize+(240*ntOffsetY));
-		int color = 0;
-
-		for (int i=0;i<8;i++){
-			yPos += pixelSize;
-			xPos = (ntNum%32)*8*pixelSize+(256*ntOffsetX);
-			for (int j=0;j<8;j++){
-				if (chrPlane[i] & 128>>j)
-					palletAddr = 0x3F00 + (palletNum<<2) +  (((plane2[i] & 128>>j)/(128>>j))<<1) + (plane1[i] & 128>>j)/(128>>j);
-				else
-					palletAddr = 0x3F00;
-				int palletNum = nes->PPURead(palletAddr)&0b00111111;
-				outPixels[yPos][xPos][0] = pallet[palletNum][0];
-				outPixels[yPos][xPos][1] = pallet[palletNum][1];
-				outPixels[yPos][xPos][2] = pallet[palletNum][2];
-				xPos += pixelSize;
-			}
-		}
-
-		
-		if (ntNum == 0x3FF)
-			ntNum = 0;
-		else
-			ntNum++;
-		ntAddr++;		
-	}
-	//glFlush();
-	
-	int currViewport[4];
-	glGetIntegerv(GL_VIEWPORT,currViewport);
-
-	glViewport(0,0,512,500);
-	glBindFramebuffer(GL_FRAMEBUFFER,p->fbo);
-	glRasterPos2i(0,0);	
-	glDrawPixels(512,500,GL_RGB,GL_UNSIGNED_BYTE,outPixels);
-	
-	glBindFramebuffer(GL_FRAMEBUFFER,0);
-	
-	glViewport(currViewport[0],currViewport[1],currViewport[2],currViewport[3]);
-
-
-}
-
-//Draw Character Tables
-void ppu::drawChars(Panel *p){
-	
-	//	Display Character Tables
-	int ntAddr = 0x0000;
-	int ntNum = 0;
-	GLubyte outPixels[129][256][3];
-	while (ntAddr < 0x2000){
-		int chrAddr = ntAddr;
-		int plane1[8];
-		int plane2[8];
-		
-		int row = ntNum/16;
-		int colm = ntNum%16;
-		
-		for (int i=0;i<16;i++){
-			if (i < 8)
-				plane1[i] = nes->PPURead(chrAddr+i);
-			else
-				plane2[i-8] = nes->PPURead(chrAddr+i);
-		}	
-		
-		int palletAddr = 0x3f00;
-		int palletNum = 0;
-		int chrPlane[8];
-		for (int i=0;i<8;i++){
-			chrPlane[i] = plane1[i] | plane2[i];
-		}
-	
-		int pixelSize = 1;
-		int xPos = ((ntNum%16)*8*pixelSize)+((ntAddr >= 0x1000)?128:0);
-		int yPos = ((ntNum/16)*8*pixelSize)-((ntAddr >= 0x1000)?128:0);
-		int color = 0;
-
-		for (int i=0;i<8;i++){
-			yPos += pixelSize;
-			xPos = ((ntNum%16)*8*pixelSize)+((ntAddr >= 0x1000)?128:0);
-			for (int j=0;j<8;j++){
-				if (chrPlane[i] & 128>>j)
-					palletAddr = 0x3F00 + (palletNum<<2) +  (((plane2[i] & 128>>j)/(128>>j))<<1) + (plane1[i] & 128>>j)/(128>>j);
-				else
-					palletAddr = 0x3F00;
-				int palletNum = nes->PPURead(palletAddr)&0b00111111;
-				outPixels[yPos][xPos][0] = pallet[palletNum][0];
-				outPixels[yPos][xPos][1] = pallet[palletNum][1];
-				outPixels[yPos][xPos][2] = pallet[palletNum][2];
-				xPos += pixelSize;
-			}
-		}
-		
-		ntNum++;
-		ntAddr += 16;		
-	}
-	//glFlush();
-	int currViewport[4];
-	glGetIntegerv(GL_VIEWPORT,currViewport);
-
-	glViewport(0,0,256,128);
-	glBindFramebuffer(GL_FRAMEBUFFER,p->fbo);
-	glRasterPos2i(0,0);	
-	glDrawPixels(256,128,GL_RGB,GL_UNSIGNED_BYTE,outPixels);
-	
-	glBindFramebuffer(GL_FRAMEBUFFER,0);
-	
-	glViewport(currViewport[0],currViewport[1],currViewport[2],currViewport[3]);
-
-
-}
-
-//Draw Sprites
-void ppu::drawSprites(){
-	glClearColor(0,0,0,0);
-	glClear(GL_COLOR_BUFFER_BIT);
-		//Sprites
-	int oamAddr = 0;
-	int sNum = 0;
-	while (oamAddr < 0x100){
-
-		int syPos = OAM[oamAddr];
-		int tileNum = OAM[oamAddr+1];
-		int attr = OAM[oamAddr+2];
-		int sxPos = OAM[oamAddr+3];
-		//cout << dec << oamAddr/4 << " Xpos:" << sxPos << " YPos:" << syPos << hex << " Tile:" << tileNum << " Attr:" << attr << endl;
-		int chrAddr = tileNum*0x10;
-		int palletNum = (attr & 3);
-		int palletAddr = 0x3f10;
-		
-		int *plane1 = new int[8];
-		int *plane2 = new int[8];
-
-		
-		for (int i=0;i<16;i++){
-			if (i < 8)
-				plane1[i] = nes->PPURead(chrAddr+i);
-			else
-				plane2[i-8] = nes->PPURead(chrAddr+i);
-		}	
-		
-		int *chrPlane = new int[8];
-		for (int i=0;i<8;i++){
-			chrPlane[i] = plane1[i] | plane2[i];
-		}
-	
-		int pixelSize = 3;
-		glColor3f(1,1,1);
-		int xPos = (sNum%16)*8*pixelSize;	
-		int yPos = ((sNum/16)*8*pixelSize);
-		int color = 0;
-
-		for (int i=0;i<8;i++){
-			yPos += pixelSize;
-			xPos = (sNum%16)*8*pixelSize;
-			for (int j=0;j<8;j++){
-				if (chrPlane[i] & 128>>j)
-					palletAddr = 0x3F10 + (palletNum<<2) +  (((plane2[i] & 128>>j)/(128>>j))<<1) + (plane1[i] & 128>>j)/(128>>j);
-				else
-					palletAddr = 0x3F10;
-				glColor3ubv(pallet[nes->PPURead(palletAddr)]);
-				//cout << hex << "\t" << palletAddr << dec << ' ' << (int)pallet[memory[palletAddr]][0] << ' ' << (int)pallet[memory[palletAddr]][1] << ' ' << (int)pallet[memory[palletAddr]][2] << endl;
-				float posX = ((xPos)-256)/256.0;
-				float posY = ((240-yPos)/240.0);
-				glRectf(posX,posY,posX+(pixelSize/256.0),posY+(pixelSize/240.0));
-			//	glRecti(xPos,yPos,(xPos)+(pixelSize,(yPos)+pixelSize);
-				xPos += pixelSize;
-			}
-		}
-
-		/*for (int i=0;i<8;i++){
-			yPos += pixelSize;
-			xPos = (sNum%16)*8*pixelSize;
-			for (int j=0;j<8;j++){
-				if (chrPlane[i] & 128>>j)
-					palletAddr = 0x3F10 + (palletNum<<2) +  (((plane2[i] & 128>>j)/(128>>j))<<1) + (plane1[i] & 128>>j)/(128>>j);
-				else
-					palletAddr = 0x3F10;
-				glColor3ubv(pallet[memory[palletAddr]]);
-			float posX = ((xPos)-256)/256.0;
-				float posY = ((240-yPos)/240.0);
-				glRectf(posX,posY,posX+(1.0/256),posY+(1.0/240));
-				xPos += pixelSize;
-			}
-		}*/
-
-		oamAddr += 4;
-		sNum++;
-	}
 }

@@ -7,15 +7,18 @@ using namespace std;
 NES::NES(){
 	//Set up components
 	CPU.nes = this;
-	CPU.ppuReg2000 = &memory[0x2000];
-	CPU.ppuReg2002 = &memory[0x2002];
 	PPU.nes = this;
-	PPU.ppuReg2000 = &memory[0x2000];
-	PPU.ppuReg2001 = &memory[0x2001];
-	PPU.ppuReg2002 = &memory[0x2002];
 	CART.nes = this;
 	APU.nes = this;
 	dTime = 0;
+
+	audioSampleRate = 48000;
+	//NTSC
+	systemClockTime = 21477272.0f;
+	ppuClockTime = systemClockTime/4;
+	//PAL
+	// systemClockTime = 26601712.0f;
+	// ppuClockTime = systemClockTime/5;
 }
 
 NES::~NES(){
@@ -27,31 +30,79 @@ void NES::reset(){
 	for (int i=0;i<0x10000;i++){
 		memory[i] = 0;
 	}
+
+	dTime = 0;
+
 	//Reset components
-	CPU.reset();
-	PPU.reset();
+	PPU.Reset();
 	APU.reset();
 	CART.reset();
+	CPU.reset();
 }
 
 bool NES::clock(int cycles){
+	if (CPU.pc == debugBreakAddr){
+		return false;
+	}
+
 	while(cycles){
 		int extraCycles = 0;
 		if (cpuTmpCycles % 3 == 0){
 			extraCycles = CPU.runInstructions();
+			CART.mapper->Clock();
+			APU.clock(1);
 		}
-		PPU.clock(1);
-		APU.clock(1);
+		PPU.Clock(1);
 		cpuTmpCycles++;
-		
-		dTime += 1.0 / 5369318.0;
-		if (dTime > 1.0/(48000)){
+
+		dTime += 1.0/(ppuClockTime*runSpeed);
+		if (dTime > 1.0/audioSampleRate){
 			dTime = 0;
 			return true;
 		}
 		cycles--;
 	}
 	return false;
+}
+
+//read from memory without side effects
+int NES::peekMemory(int addr){
+	//Set up memory mirrors
+	int mAddr = addr;
+	//Internal RAM
+	if (addr >= 0x0800 && addr < 0x2000)
+		mAddr %= 0x0800;
+	//PPU Registers
+	else if (addr >= 0x2008 && addr < 0x4000)
+		mAddr = addr%8+0x2008;
+	else if (addr >= 0x6000){
+		return CART.PeekPrgMem(addr);
+	}
+
+	if (mAddr == 0x2004)
+		return PPU.OAM[memory[0x2003]];
+
+	if (mAddr == 0x2007){
+		//Read from VBuffer
+		if (PPU.v < 0x3f00) return 0xFF&PPU.vBuffer;
+		//Read from VRAM
+		else return 0xFF&PPURead(PPU.v%0x4000);
+	}
+
+	if (mAddr == 0x4015){
+		uint8_t out = 0x00;
+		out |= (APU.pulse1.lenCounter > 0) ? 0x01 : 0x00;
+		out |= (APU.pulse2.lenCounter > 0) ? 0x02 : 0x00;
+		out |= (APU.triangle.lengthCounter > 0) ? 0x04 : 0x00;
+		out |= (APU.noise.lenCounter > 0) ? 0x08 : 0x00;
+		out |= (APU.dmc.bytesRemaining > 0) ? 0x10 : 0x00;
+		out |= (APU.frameCounter.irqFlag) ? 0x40 : 0x00;
+		out |= (APU.dmc.irqFlag) ? 0x80 : 0x00;
+		return out;
+	}
+
+	return memory[mAddr];
+
 }
 
 //Read from memory
@@ -66,29 +117,67 @@ int NES::readMemory(int addr){
 		mAddr = addr%8+0x2008;
 	//Cartridge
 	else if (addr >= 0x6000){
-			return CART.readPrgMem(addr);
+		return CART.readPrgMem(addr);
 	}
-	
+
+	//PPU registers
+
+	if (mAddr == 0x2002){
+		//Clear MSB after read
+		int tmpVal = memory[0x2002];
+		writeMemory(0x2002,memory[mAddr]&0x7F);
+		PPU.nmiOccured = false;
+		PPU.w = 0;
+		return tmpVal;
+	}
 	//Read from OAM memory
 	if (mAddr == 0x2004)
 		return PPU.OAM[memory[0x2003]];
-		
-		
+	if (mAddr == 0x2007){
+		//Read from VBuffer
+		int tmpVal = 0;
+		if (PPU.v < 0x3f00){
+			tmpVal = 0xFF&PPU.vBuffer;
+			PPU.vBuffer = PPURead(PPU.v%0x3f00);
+		}
+		//Read from pallet
+		else{
+			tmpVal = 0xFF&PPURead(PPU.v%0x4000);
+			PPU.vBuffer = PPURead(PPU.v%0x100 + 0x2f00);
+		}
+		//Increment PPU VRAM by value in 0x2000
+		if (memory[0x2000] & 0b00000100)
+			PPU.v += 32;
+		else
+			PPU.v++;
+
+		//clock mmc3 mapper
+		CART.readChrMem(PPU.v);
+
+		return tmpVal;
+	}
+
+
 	if (mAddr == 0x4015){
 		uint8_t out = 0x00;
 		out |= (APU.pulse1.lenCounter > 0) ? 0x01 : 0x00;
-		out |= (APU.pulse2.lenCounter > 0) ? 0x02 : 0x00;	
+		out |= (APU.pulse2.lenCounter > 0) ? 0x02 : 0x00;
 		out |= (APU.triangle.lengthCounter > 0) ? 0x04 : 0x00;
 		out |= (APU.noise.lenCounter > 0) ? 0x08 : 0x00;
 		out |= (APU.dmc.bytesRemaining > 0) ? 0x10 : 0x00;
 		out |= (APU.frameCounter.irqFlag) ? 0x40 : 0x00;
 		out |= (APU.dmc.irqFlag) ? 0x80 : 0x00;
 		APU.frameCounter.irqFlag = false;
-		//cout << APU.dmc.bytesRemaining << endl;
-	//	if (APU.pulse1.lenCounter)cout << APU.pulse1.lenCounter << endl;
 		return out;
 	}
-	
+
+	//controllers
+
+	if (mAddr == 0x4016)
+		return CONTRL.readController(0);
+	if (mAddr == 0x4017)
+		return CONTRL.readController(1);
+
 	return memory[mAddr];
 }
 
@@ -102,23 +191,33 @@ void NES::writeMemory(int addr, int value){
 		//PPU registers
 	  else if (addr >= 0x2008 && addr < 0x4000)
 			mAddr = addr%8+0x2008;
-		//Cartridge	
+		//Cartridge
 		else if (addr >= 0x6000){
 			CART.cartWrite(addr,value);
 		}
 
+		if ((mAddr >= 0x2000 && mAddr <= 0x2007 && mAddr != 0x2002)){
+			writeMemory(0x2002, memory[0x2002] & 0b11100000);
+			writeMemory(0x2002, memory[0x2002] | (value & 0b00011111));
+		}
+
+		// if (mAddr == 0x2001)
+		// 	std::cout << value << ' ' << PPU.scanlines << ' ' << PPU.cycles << std::endl;
 		//PPU Control
 	  if (mAddr == 0x2000){
-			PPU.t &= (0xFFFF-0x0C00);
+			PPU.nmiOutput = value&0b10000000;
+			PPU.t &= 0xF3FF;
 			PPU.t |= ((value & 3)<<10);
+			//if (!(value&0x08))std::cin.get();
+			//std::cout << std::dec << PPU.scanlines << ' ' << std::hex << value << std::endl;
 		}
-		
+
 		//OAM Data
 		else if (mAddr == 0x2004){
-			PPU.OAM[memory[0x2003]] = value;			
+			PPU.OAM[memory[0x2003]] = value;
 			memory[0x2003]++;
 		}
-		
+
 		//PPU Scroll
 		else if (mAddr == 0x2005){
 			if(!PPU.w){
@@ -133,12 +232,12 @@ void NES::writeMemory(int addr, int value){
 				PPU.t |= ((value & 0b11111000)<<2);
 				PPU.w = 0;
 			}
-			
+
 		}
 		//PPU Address
 		else if (mAddr == 0x2006){
 			if (!PPU.w){
-				PPU.t &= 0x00FF;	
+				PPU.t &= 0x00FF;
 				PPU.t |= ((value & 0b00111111)<<8);
 				PPU.w = 1;
 			}
@@ -147,25 +246,34 @@ void NES::writeMemory(int addr, int value){
 				PPU.t |= value;
 				PPU.v = PPU.t;
 				PPU.w = 0;
+				//clock mmc3 mapper
+				CART.readChrMem(PPU.v);
 			}
 		}
 		//PPU Data
 		else if (mAddr == 0x2007){
 			PPUWrite(PPU.v,value);
-			if (readMemory(0x2000) & 0b00000100)
+			if (memory[0x2000] & 0b00000100)
 				PPU.v += 32;
-			else if ((readMemory(0x2000) & 0b00000100) == 0)
-				PPU.v++;	
+			else if ((memory[0x2000] & 0b00000100) == 0)
+				PPU.v++;
+			//clock mmc3 mapper
+			CART.readChrMem(PPU.v);
 		}
 		//OAM DMA
 		else if (mAddr == 0x4014){
+			int oamAddr = memory[0x2003];
 			for (int i=0;i<256;i++){
-				PPU.OAM[i] = memory[(value*256)+i];
+				int index = oamAddr+i;
+				if (index >= 256)
+					index = index%256;
+				PPU.OAM[index] = memory[(value*256)+i];
 			}
-			PPU.cycles += (513*3);
+			//PPU.Clock(513*3);
 		}
-		
-		auto pulseWrite = [this](apu::Pulse *p,int mAddr, int value,int addrOffset){
+
+		//Pulse
+		auto pulseWrite = [this](Pulse *p,int mAddr, int value,int addrOffset){
 			if (mAddr == 0x4000+addrOffset){
 				p->duty = (value&0xC0)>>6;
 				p->envelopeLoop = value&0x20;
@@ -187,20 +295,18 @@ void NES::writeMemory(int addr, int value){
 				//cout << APU.pulse1.lenCounter << endl;
 				p->timer = (p->timer&0xFF) + ((value&0x7)*0x100);
 				p->freq = 1789773  / (16 * (double)(p->timer+1));
-				//cout << APU.pulse1.timer << endl;	
+				//cout << APU.pulse1.timer << endl;
 				if (p->enabled){
 					p->lenCounter = APU.lenCounterLookup[(value&0xF8)>>3];
 				}
-				p->seqMask = 1;
-				p->seqOffset = 0;
 				p->envelopeStart = true;
 			}
 		};
-		
+
 		pulseWrite(&APU.pulse1,mAddr,value,0);
 		pulseWrite(&APU.pulse2,mAddr,value,4);
-	
-		
+
+
 		//Triangle
 		if (mAddr == 0x4008){
 			APU.triangle.linControl = value&0x80;
@@ -209,10 +315,14 @@ void NES::writeMemory(int addr, int value){
 		else if (mAddr == 0x400A){
 			APU.triangle.timer = (APU.triangle.timer&0x700) + (value&0xFF);
 			APU.triangle.freq = 1789773  / (32 * (double)(APU.triangle.timer+1));
+			if (value == 0 || value == 1)
+				APU.triangle.freq = 0;
 		}
 		else if (mAddr == 0x400B){
 			APU.triangle.timer = (APU.triangle.timer&0xFF) + ((value&0x7)*0x100);
 			APU.triangle.freq = 1789773  / (32 * (double)(APU.triangle.timer+1));
+			if (value == 0 || value == 1)
+				APU.triangle.freq = 0;
 			if (APU.triangle.enabled)
 				APU.triangle.lengthCounter = APU.lenCounterLookup[(value&0xF8)>>3];
 			APU.triangle.linReloadFlag = true;
@@ -235,7 +345,7 @@ void NES::writeMemory(int addr, int value){
 		//DMC
 		else if (mAddr == 0x4010){
 			APU.dmc.irqEnabled = value&0x80;
-			APU.dmc.irqFlag &= value&0x80; 
+			APU.dmc.irqFlag &= value&0x80;
 			APU.dmc.loopFlag = value&0x40;
 			APU.dmc.timer = APU.dmcRateLookup[value&0xf]-1;
 		}
@@ -252,31 +362,73 @@ void NES::writeMemory(int addr, int value){
 		//APU enable
 		else if (mAddr == 0x4015)
 			APU.setChannelEnables(value);
-		else if (mAddr == 0x4016)
+		else if (mAddr == 0x4016){
 			CONTRL.pollController(value,0);
+			CONTRL.pollController(value,1);
+		}
 		else if (mAddr == 0x4017){
-			APU.cycles = 0;
-	
-			if (APU.incCycles)
-				APU.frameCounter.count = 3;
-			else
-				APU.frameCounter.count = 4;
-			
+			APU.frameCounter.count = 0;
 			APU.frameCounter.mode = value&0x80;
 			APU.frameCounter.irqInhibit = value&0x40;
 			if (value&0x40)
 				APU.frameCounter.irqFlag = false;
-				
+
 			if (value&0x80){
 				APU.halfFrame();
 				APU.quartFrame();
 			}
 		}
-		
+
 		memory[addr] = value;
 		memory[mAddr] = value;
+
+		// if (mAddr == 0x2001)
+		// 	std::cout << memory[mAddr] << ' ' << PPU.scanlines << ' ' << PPU.cycles << std::endl;
 }
 
+int NES::PeekPPUMemory(int addr){
+	int mAddr = addr;
+	if (addr >= 0x3f20)
+		mAddr = addr%0x3f20+0x3f00;
+	else if (addr >= 0x3000 && addr < 0x3F00)
+		mAddr = addr%0x3000+0x2000;
+	else if (addr == 0x3f10 || addr == 0x3f14 || addr == 0x3f18 || addr == 0x3f1c)
+		mAddr = addr - 0x0010;
+
+	//Pattern tables
+	if (mAddr <= 0x1FFF)
+		return CART.PeekChrMem(mAddr);
+	//Nametables
+	else if (mAddr >= 0x2000 && mAddr <= 0x2FFF){
+		int mMode = CART.getMirrorMode();
+		//One Screen mirroring
+		if (!mMode)
+			return PPU.ntRAM[mAddr%0x400];
+		//Vertical mirroring
+		else if (mMode == 1){
+			if (mAddr>=0x2800 && mAddr <= 0x2BFF)
+				return PPU.ntRAM[(mAddr%0x400)];
+			else if (mAddr >= 0x2C00)
+				return PPU.ntRAM[0x400+(mAddr%0x400)];
+			else
+				return PPU.ntRAM[mAddr%0x800];
+		}
+		//Horizontal mirroring
+		else if (mMode == 2){
+			if (mAddr<=0x27FF)
+				return PPU.ntRAM[mAddr%0x400];
+			else if (addr >= 0x2800)
+				return PPU.ntRAM[0x400 + mAddr%0x400];
+			else
+				return PPU.ntRAM[mAddr%0x400];
+		}
+	}
+	//pallet
+	else if (mAddr >= 0x3F00 && mAddr <= 0x3F1F)
+		return PPU.palletRAM[mAddr%0x20];
+
+	return -1;//PPU.memory[mAddr];
+}
 
 //Read from PPU Memory
 int NES::PPURead(int addr) {
@@ -288,7 +440,7 @@ int NES::PPURead(int addr) {
 		mAddr = addr%0x3000+0x2000;
 	else if (addr == 0x3f10 || addr == 0x3f14 || addr == 0x3f18 || addr == 0x3f1c)
 		mAddr = addr - 0x0010;
-	
+
 	//Pattern tables
 	if (mAddr <= 0x1FFF)
 		return CART.readChrMem(mAddr);
@@ -315,10 +467,13 @@ int NES::PPURead(int addr) {
 				return PPU.ntRAM[0x400 + mAddr%0x400];
 			else
 				return PPU.ntRAM[mAddr%0x400];
-		}	
+		}
 	}
-	
-	return PPU.memory[mAddr];
+	//pallet
+	else if (mAddr >= 0x3F00 && mAddr <= 0x3F1F)
+		return PPU.palletRAM[mAddr%0x20];
+
+	return -1;//PPU.memory[mAddr];
 }
 
 //Write to PPU memory
@@ -326,12 +481,12 @@ void NES::PPUWrite(int addr, int value){
 	int mAddr = addr;
 	//Set up memory mirroring
 	if (addr >= 0x3f20)
-		mAddr = addr%0x3f20+0x3f00;
+		mAddr = addr%0x20+0x3f00;
 	else if (addr >= 0x3000 && addr < 0x3F00)
 		mAddr = addr%0x3000+0x2000;
 	else if (addr == 0x3f10 || addr == 0x3f14 || addr == 0x3f18 || addr == 0x3f1c)
 		mAddr = addr - 0x0010;
-	
+
 	//Pattern tables
 	if (mAddr <= 0x1FFF)
 		CART.cartWrite(mAddr,value);
@@ -358,11 +513,15 @@ void NES::PPUWrite(int addr, int value){
 				PPU.ntRAM[0x400 + mAddr%0x400] = value;
 			else
 				PPU.ntRAM[mAddr%0x400] = value;
-		}	
+		}
+	}
+	//pallet
+	else if (mAddr >= 0x3F00 && mAddr <= 0x3F1F){
+		PPU.palletRAM[mAddr%0x20] = value;
 	}
 
-	PPU.memory[mAddr] = value;
-	PPU.memory[addr] = value;
+	// PPU.memory[mAddr] = value;
+	// PPU.memory[addr] = value;
 }
 
 void NES::saveState(){
@@ -370,125 +529,18 @@ void NES::saveState(){
 	string fileName = "./SaveStates/"+CART.name;
 	fileName.erase(fileName.length()-4,4);
 	file.open(fileName,ios::binary);
-	char *x = new char[4];
+	char x[4];
 	//CPU
-	x[0] = CPU.a;
-	file.write(x,1);
-	x[0] = CPU.x;
-	file.write(x,1);
-	x[0] = CPU.y;
-	file.write(x,1);
-	x[0] = CPU.s;
-	file.write(x,1);
-	x[0] = CPU.p;
-	file.write(x,1);
-	x[0] = (CPU.pc&0xFF00)>>8;
-	x[1] = CPU.pc&0xFF;
-	file.write(x,2);
+	CPU.SaveState(file);
 	//Memory
-	for (int i=0;i<0x10000;i++){
-		x[0] = memory[i];
-		file.write(x,1);
-	}
+	file.write(reinterpret_cast<char*>(&memory[0]),0x10000*sizeof(int));
 	//PPU
-	x[0] = (PPU.cycles&0xFF00)>>8;
-	x[1] = PPU.cycles&0xFF;
-	file.write(x,2);
-	x[0] = (PPU.scanlines&0xFF000000)>>24;
-	x[1] = (PPU.scanlines&0xFF0000)>>16;
-	x[2] = (PPU.scanlines&0xFF00)>>8;
-	x[3] = PPU.scanlines&0xFF;
-	file.write(x,sizeof(int));
-	x[0] = (PPU.frames&0xFF000000)>>24;
-	x[1] = (PPU.frames&0xFF0000)>>16;
-	x[2] = (PPU.frames&0xFF00)>>8;
-	x[3] = PPU.frames&0xFF;
-	file.write(x,sizeof(int));
-	x[0] = (PPU.v&0xFF00)>>8;
-	x[1] = PPU.v&0xFF;
-	file.write(x,2);
-	x[0] = (PPU.t&0xFF00)>>8;
-	x[1] = PPU.t&0xFF;
-	file.write(x,2);
-	x[0] = PPU.x;
-	file.write(x,1);
-	x[0] = PPU.w;
-	file.write(x,1);
-	x[0] = PPU.frameComplete;
-	file.write(x,1);
-	x[0] = PPU.s0Hit;
-	file.write(x,1);
-	x[0] = (PPU.currScanline&0xFF000000)>>24;
-	x[1] = (PPU.currScanline&0xFF0000)>>16;
-	x[2] = (PPU.currScanline&0xFF00)>>8;
-	x[3] = PPU.currScanline&0xFF;
-	file.write(x,sizeof(int));
-	x[0] = PPU.vBlank;
-	file.write(x,1);
-	x[0] = (PPU.tmpScanline&0xFF000000)>>24;
-	x[1] = (PPU.tmpScanline&0xFF0000)>>16;
-	x[2] = (PPU.tmpScanline&0xFF00)>>8;
-	x[3] = PPU.tmpScanline&0xFF;
-	file.write(x,sizeof(int));
-	for (int i=0;i<0x4000;i++){
-		x[0] = PPU.memory[i];
-		file.write(x,1);
-	}
-	for (int i=0;i<0x100;i++){
-		x[0] = PPU.OAM[i];
-		file.write(x,1);
-	}
-	for (int i=0;i<0x800;i++){
-		x[0] = PPU.ntRAM[i];
-		file.write(x,1);
-	}
-	x[0] = (PPU.bgShiftReg16[0]&0xFF00)>>8;
-	x[1] = PPU.bgShiftReg16[0]&0xFF;
-	file.write(x,2);
-	x[0] = (PPU.bgShiftReg16[1]&0xFF00)>>8;
-	x[1] = PPU.bgShiftReg16[1]&0xFF;
-	file.write(x,2);
-	x[0] = PPU.bgShiftReg8[0];
-	file.write(x,1);
-	x[0] = PPU.bgShiftReg8[1];
-	file.write(x,1);
-	x[0] = PPU.bgLatch[0];
-	file.write(x,1);
-	x[0] = PPU.bgLatch[1];
-	file.write(x,1);
-
-	for (int i=0;i<8;i++){
-		x[0] = PPU.sShiftReg8_1[i];
-		file.write(x,1);
-		x[0] = PPU.sShiftReg8_2[i];
-		file.write(x,1);
-		x[0] = PPU.sLatch[i];
-		file.write(x,1);
-		x[0] = PPU.sCount[i];
-		file.write(x,1);
-	}
-	
+	PPU.SaveState(file);
+	//APU
+	APU.SaveState(file);
 	//Cartridge
-	for (int i=0;i<16;i++){
-		x[0] = CART.header.data[i];
-		file.write(x,1);
-	}
+	CART.SaveState(file);
 
-	for (int i=0;i<CART.prg_size;i++){
-		x[0] = CART.prgMemory[i];
-		file.write(x,1);
-	}
-
-	for (int i=0;i<CART.chr_size;i++){
-		x[0] = CART.chrMemory[i];
-		file.write(x,1);
-	}
-
-	x[0] = CART.ntMirrorMode;
-	file.write(x,1);
-
-	CART.Mapper->saveMapState(&file,x);
-	
 	file.close();
 }
 
@@ -507,103 +559,15 @@ void NES::loadState(){
 	x[2] = 0;
 	x[3] = 0;
 	//CPU
-	file.read(x,1);
-	CPU.a = (int)(unsigned char)x[0];
-	file.read(x,1);
-	CPU.x = (int)(unsigned char)x[0];
-	file.read(x,1);
-	CPU.y = (int)(unsigned char)x[0];
-	file.read(x,1);
-	CPU.s = (int)(unsigned char)x[0];
-	file.read(x,1);
-	CPU.p = (int)(unsigned char)x[0];
-	file.read(x,2);
-	CPU.pc = (int)(unsigned char)x[0]*0x100+(int)(unsigned char)x[1];
+	CPU.LoadState(file);
 	//Memory
-	for (int i=0;i<0x10000;i++){
-		file.read(x,1);
-		memory[i] = (int)(unsigned char)x[0];
-	}
+	file.read(reinterpret_cast<char*>(&memory[0]),0x10000*sizeof(int));
 	//PPU
-	file.read(x,2);
-	PPU.cycles = (int)(unsigned char)x[0]*0x100+(int)(unsigned char)x[1];
-	file.read(x,sizeof(int));
-	PPU.scanlines = (int)(unsigned char)x[0]*0x1000000+(int)(unsigned char)x[1]*0x10000+(int)(unsigned char)x[2]*0x100+(int)(unsigned char)x[3];
-	file.read(x,sizeof(int));
-	PPU.frames = (int)(unsigned char)x[0]*0x1000000+(int)(unsigned char)x[1]*0x10000+(int)(unsigned char)x[2]*0x100+(int)(unsigned char)x[3];
-	file.read(x,2);
-	PPU.v = (int)(unsigned char)x[0]*0x100+(int)(unsigned char)x[1];
-	file.read(x,2);
-	PPU.t = (int)(unsigned char)x[0]*0x100+(int)(unsigned char)x[1];
-	file.read(x,1);
-	PPU.x = (int)(unsigned char)x[0];
-	file.read(x,1);
-	PPU.w = (int)(unsigned char)x[0];
-	file.read(x,1);
-	PPU.frameComplete = (int)(unsigned char)x[0];
-	file.read(x,1);
-	PPU.s0Hit = (int)(unsigned char)x[0];
-	file.read(x,sizeof(int));
-	PPU.currScanline = (int)(unsigned char)x[0]*0x1000000+(int)(unsigned char)x[1]*0x10000+(int)(unsigned char)x[2]*0x100+(int)(unsigned char)x[3];
-	file.read(x,1);
-	PPU.vBlank = (int)(unsigned char)x[0];
-	file.read(x,sizeof(int));
-	PPU.tmpScanline = (int)(unsigned char)x[0]*0x1000000+(int)(unsigned char)x[1]*0x10000+(int)(unsigned char)x[2]*0x100+(int)(unsigned char)x[3];
-	for (int i=0;i<0x4000;i++){
-		file.read(x,1);
-		PPU.memory[i] = (int)(unsigned char)x[0];
-	}
-	for (int i=0;i<0x100;i++){
-		file.read(x,1);
-		PPU.OAM[i] = (int)(unsigned char)x[0];
-	}
-	for (int i=0;i<0x800;i++){
-			file.read(x,1);
-			PPU.ntRAM[i] = (int)(unsigned char)x[0];
-	}
-	file.read(x,2);
-	PPU.bgShiftReg16[0] = (int)(unsigned char)x[0]*0x100+(int)(unsigned char)x[1];
-	file.read(x,2);
-	PPU.bgShiftReg16[1] = (int)(unsigned char)x[0]*0x100+(int)(unsigned char)x[1];
-	file.read(x,1);
-	PPU.bgShiftReg8[0] = (int)(unsigned char)x[0];
-	file.read(x,1);
-	PPU.bgShiftReg8[1] = (int)(unsigned char)x[0];
-	file.read(x,1);
-	PPU.bgLatch[0] = (int)(unsigned char)x[0];
-	file.read(x,1);
-	PPU.bgLatch[1] = (int)(unsigned char)x[0];
-
-	for (int i=0;i<8;i++){
-		file.read(x,1);
-		PPU.sShiftReg8_1[i] = (int)(unsigned char)x[0];
-		file.read(x,1);
-		PPU.sShiftReg8_2[i] = (int)(unsigned char)x[0];
-		file.read(x,1);
-		PPU.sLatch[i] = (int)(unsigned char)x[0];
-		file.read(x,1);
-		PPU.sCount[i] = (int)(unsigned char)x[0];
-	}
-	//Cartridge
-	for (int i=0;i<16;i++){
-		file.read(x,1);
-		CART.header.data[i] = (int)(unsigned char)x[0];
-	}
-	
-	for (int i=0;i<CART.prg_size;i++){
-		file.read(x,1);
-		CART.prgMemory[i] = (int)(unsigned char)x[0];
-	}
-
-	for (int i=0;i<CART.chr_size;i++){
-		file.read(x,1);
-		CART.chrMemory[i] = (int)(unsigned char)x[0];
-	}
-
-	file.read(x,1);
-	CART.ntMirrorMode = (int)(unsigned char)x[0];
-
-	CART.Mapper->loadMapState(&file,x);
+	PPU.LoadState(file);
+	//APU
+	APU.LoadState(file);
+ 	//Cartridge
+	CART.LoadState(file);
 
 	file.close();
 }

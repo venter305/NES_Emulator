@@ -1,19 +1,6 @@
 #include <iostream>
-#include <GLFW/glfw3.h>
 #include "controller.h"
 
-using namespace std;
-
-/*Button Mappings:
-	0 A
-	1 B
-	2 Select
-	3 Start
-	4	Up
-	5 Down
-	6	Left
-	7 Right
-*/
 controller::controller(){
 	//Init
 	buttons_p1 = 0;
@@ -27,7 +14,7 @@ controller::controller(){
 
 //Store controller values
 void controller::pollController(int value, int contrlNum){
-		
+
 		if (value & 0b00000001){
 			if (contrlNum == 0)
 				nextButton_p1 = buttons_p1;
@@ -47,4 +34,20 @@ int controller::readController(int contrlNum){
 		nextButton_p2 >>= 1;
 	//Return button value
 	return tmp;
+}
+
+void controller::UpdateButton(int state, int button, int contrlNum, bool joystick) {
+	uint8_t btn = joystick?joystickMapping.GetButton(button):buttonMapping.GetButton(button);
+	if (btn == NONE)
+		return;
+
+	if (contrlNum){
+		if (state == 1) buttons_p2 |= btn;
+		else if(!state) buttons_p2 &= ~btn;
+	}
+	else {
+		if (state == 1) buttons_p1 |= btn;
+		else if(!state) buttons_p1 &= ~btn;
+	}
+
 }

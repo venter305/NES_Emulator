@@ -30,6 +30,7 @@ class OpenRomWindow : public Window{
       pathInput->setEnabledColor(enabledColor);
       pathInput->setDisabledColor(disabledColor);
       pathInput->setTextAlignment(Button::TextAlignment::Left);
+      pathInput->setEnabled(true);
       layout->AddElement(pathInput,100);
 
       std::shared_ptr<Button> openBtn = std::make_shared<Button>(10,5,75,20,[&](Button *btn){

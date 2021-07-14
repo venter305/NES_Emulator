@@ -8,7 +8,7 @@
 #include "cartridge.h"
 
 class NES{
-	
+
 	public:
 		//Components
 		cpu CPU;
@@ -16,27 +16,37 @@ class NES{
 		apu APU;
 		controller CONTRL;
 		cartridge CART;
-		
+
 		GLFWwindow *window;
 
 		int cpuTmpCycles = 0;
 		int apuTmpCycles = 0;
-		
+
+		float systemClockTime = 0;
+		float ppuClockTime = 0;
+		float audioSampleRate = 0;
+
 		int memory[0x10000];
-		
+
 		double dTime;
-		
+		float runSpeed = 1;
+
+		int debugBreakAddr = -1;
+		bool debugBreak = false;
+
 		NES();
 		~NES();
 		void reset();
 		bool clock(int);
+		int peekMemory(int addr);
 		int readMemory(int addr);
+		int PeekPPUMemory(int addr);
 		int PPURead(int addr);
 		void writeMemory(int addr, int value);
 		void PPUWrite(int addr, int value);
 		void saveState();
 		void loadState();
-	
+
 
 };
 #endif

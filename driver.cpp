@@ -1,23 +1,14 @@
 #include <iostream>
-#include 	<bitset>
-#include <fstream>
-#include <time.h>
-#include <chrono>
-#include <thread>
-#include <freetype2/ft2build.h>
-#include FT_FREETYPE_H
-#include <sstream>
 #include "./GraphicsEngine/graphicsEngine.h"
 #include "NES.h"
 #include "SoundManager/soundManager.h"
 #include "OpenRomWindow.h"
+#include "DebuggingWindow.h"
 
 
 int APP_WIDTH = 256*2;
-int APP_HEIGHT = 240*2+20;
+int APP_HEIGHT = 240*2+25;
 
-//Panel *gameScreen;
-//Panel *menuBar;
 NES n;
 bool paused = false;
 
@@ -27,7 +18,7 @@ class MainWindow : public Window{
 		MainWindow(int w,int h,std::string name):Window(w,h,name){
 		}
 
-		void OnStartup(){
+		void GUIinit(){
 			glClearColor(0.9f,0.9f,0.9f,1.0f);
 
 			std::shared_ptr<ListLayout> mainList = std::make_shared<ListLayout>(ListLayout::ListMode::Vertical,0,APP_HEIGHT);
@@ -41,10 +32,13 @@ class MainWindow : public Window{
 			});
 			menuBar->AddMenuButton("Pause",[&](Button *btn){
 				if (!paused)
-					btn->setText("Resume");
+				btn->setText("Resume");
 				else
-					btn->setText("Pause");
+				btn->setText("Pause");
 				paused = !paused;
+			});
+			menuBar->AddMenuButton("Reset",[&](Button *btn){
+				 n.reset();
 			});
 			menuBar->AddMenuButton("Save State",[&](Button *btn){
 				n.saveState();
@@ -52,18 +46,51 @@ class MainWindow : public Window{
 			menuBar->AddMenuButton("Load State",[&](Button *btn){
 				n.loadState();
 			});
+			menuBar->AddMenuButton("Debugging",[&](Button *btn){
+				GraphicsEngine::AddWindow(new DebuggingWindow(720,580,"Debug"));
+			});
+			menuBar->AddMenuButton("Toggle Fast Forward",[&](Button *btn){
+				if (n.runSpeed > 1)
+					n.runSpeed = 1;
+				else
+					n.runSpeed = 2;
+			});
+
 			mainList->AddElement(menuBar,0);
 
 			//Game Screen panel
-		  std::shared_ptr<Panel> gameScreen = std::make_shared<Panel>(0,0,APP_WIDTH,APP_HEIGHT-20);
+			std::shared_ptr<Panel> gameScreen = std::make_shared<Panel>(0,0,APP_WIDTH,APP_HEIGHT-25);
 			gameScreen->CreateTexture(256,240,GL_RGB,GL_UNSIGNED_BYTE,nullptr);
-			glBindTexture(GL_TEXTURE_2D,gameScreen->tex);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			gameScreen->ChangeTextureParamater(GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+			gameScreen->ChangeTextureParamater(GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 			gameScreen->flipY();
 			mainList->AddElement(gameScreen,100);
 
 			guiMan.AddLayout(mainList);
+		}
+
+		void OnStartup(){
+
+			GUIinit();
+
+			//Button layout
+			n.CONTRL.buttonMapping.btn_A = GLFW_KEY_Z;
+			n.CONTRL.buttonMapping.btn_B = GLFW_KEY_X;
+			n.CONTRL.buttonMapping.btn_SELECT = GLFW_KEY_A;
+			n.CONTRL.buttonMapping.btn_START = GLFW_KEY_S;
+			n.CONTRL.buttonMapping.btn_UP = GLFW_KEY_UP;
+			n.CONTRL.buttonMapping.btn_DOWN = GLFW_KEY_DOWN;
+			n.CONTRL.buttonMapping.btn_LEFT = GLFW_KEY_LEFT;
+			n.CONTRL.buttonMapping.btn_RIGHT = GLFW_KEY_RIGHT;
+
+			n.CONTRL.joystickMapping.btn_A = GLFW_GAMEPAD_BUTTON_A;
+			n.CONTRL.joystickMapping.btn_B = GLFW_GAMEPAD_BUTTON_X;
+			n.CONTRL.joystickMapping.btn_SELECT = GLFW_GAMEPAD_BUTTON_BACK;
+			n.CONTRL.joystickMapping.btn_START = GLFW_GAMEPAD_BUTTON_START;
+			n.CONTRL.joystickMapping.btn_UP = GLFW_GAMEPAD_BUTTON_DPAD_UP;
+			n.CONTRL.joystickMapping.btn_DOWN = GLFW_GAMEPAD_BUTTON_DPAD_DOWN;
+			n.CONTRL.joystickMapping.btn_LEFT = GLFW_GAMEPAD_BUTTON_DPAD_LEFT;
+			n.CONTRL.joystickMapping.btn_RIGHT = GLFW_GAMEPAD_BUTTON_DPAD_RIGHT;
 		}
 
 		void OnUpdate(double dTime){
@@ -71,7 +98,7 @@ class MainWindow : public Window{
 
 			if (paused == false){
 				//Update Game Screen
-				auto gameScreen = std::static_pointer_cast<Panel>(guiMan.elements[100]);
+				auto gameScreen = guiMan.GetElement<Panel>(100);
 				gameScreen->UpdateTexture(0,0,256,240,GL_RGB,GL_UNSIGNED_BYTE,n.PPU.pixelVal);
 			}
 
@@ -79,6 +106,7 @@ class MainWindow : public Window{
 		}
 
 		void OnShutdown(){
+			GraphicsEngine::CloseAllWindows();
 		}
 
 		void OnEvent(Event &ev){
@@ -89,39 +117,18 @@ class MainWindow : public Window{
 					{
 						int keyCode = static_cast<KeyEvent*>(&ev)->GetKeyCode();
 						int keyState = static_cast<KeyEvent*>(&ev)->GetKeyState();
-						switch (keyCode){
-							case GLFW_KEY_Z:
-								if (keyState == KeyEvent::KeyState::Pressed) n.CONTRL.buttons_p1 |= 0b00000001;
-								else if(keyState == KeyEvent::KeyState::Released) n.CONTRL.buttons_p1 &= 0b11111110;
-								break;
-							case GLFW_KEY_X:
-								if (keyState == KeyEvent::KeyState::Pressed) n.CONTRL.buttons_p1 |= 0b00000010;
-								else if(keyState == KeyEvent::KeyState::Released) n.CONTRL.buttons_p1 &= 0b11111101;
-								break;
-							case GLFW_KEY_A:
-								if (keyState == KeyEvent::KeyState::Pressed) n.CONTRL.buttons_p1 |= 0b00000100;
-								else if(keyState == KeyEvent::KeyState::Released) n.CONTRL.buttons_p1 &= 0b11111011;
-								break;
-							case GLFW_KEY_S:
-								if (keyState == KeyEvent::KeyState::Pressed) n.CONTRL.buttons_p1 |= 0b00001000;
-								else if(keyState == KeyEvent::KeyState::Released) n.CONTRL.buttons_p1 &= 0b11110111;
-								break;
-							case GLFW_KEY_UP:
-								if (keyState == KeyEvent::KeyState::Pressed) n.CONTRL.buttons_p1 |= 0b00010000;
-								else if(keyState == KeyEvent::KeyState::Released) n.CONTRL.buttons_p1 &= 0b11101111;
-								break;
-							case GLFW_KEY_DOWN:
-								if (keyState == KeyEvent::KeyState::Pressed) n.CONTRL.buttons_p1 |= 0b00100000;
-								else if(keyState == KeyEvent::KeyState::Released) n.CONTRL.buttons_p1 &= 0b11011111;
-								break;
-							case GLFW_KEY_LEFT:
-								if (keyState == KeyEvent::KeyState::Pressed) n.CONTRL.buttons_p1 |= 0b01000000;
-								else if(keyState == KeyEvent::KeyState::Released)n.CONTRL.buttons_p1 &= 0b10111111;
-								break;
-							case GLFW_KEY_RIGHT:
-								if (keyState == KeyEvent::KeyState::Pressed) n.CONTRL.buttons_p1 |= 0b10000000;
-								else if(keyState == KeyEvent::KeyState::Released) n.CONTRL.buttons_p1 &= 0b01111111;
-						}
+						n.CONTRL.UpdateButton(keyState,keyCode,0,false);
+						break;
+					}
+				case Event::JoystickButton:
+					{
+						int button = static_cast<JoystickButtonEvent*>(&ev)->GetButton();
+						int state = static_cast<JoystickButtonEvent*>(&ev)->GetState();
+						n.CONTRL.UpdateButton(state,button,0,true);
+
+						if (button == GLFW_GAMEPAD_BUTTON_LEFT_BUMPER)
+							n.runSpeed = (state == GLFW_PRESS)?2:1;
+
 						break;
 					}
 			}
@@ -129,27 +136,29 @@ class MainWindow : public Window{
 
 };
 
-uint8_t soundLoop (){
-	if (!paused){
-		while(!n.clock(1) && !paused){};
-	}
-	return n.APU.output;
+uint16_t soundLoop (){
+	while(!paused && !n.clock(1)){};
+	// if (paused)
+	// 	std::cout << '\r' << n.peekMemory(0x0020) << std::flush;
+	return ((float)n.APU.output/0xFF)*0xFFFF;
 }
 
 int main(int argc, char** argv) {
-	std::string romName = "Roms/";
+	std::string romName = "";
 	if (argc > 1)
 		romName += argv[1];
 	else
-		romName += "SMB.nes";
+		romName += "Roms/SMB.nes";
 
 	//Read Rom
-	n.CART.readRom(romName);
+	if (!n.CART.readRom(romName)){
+		std::cout << "No Valid Rom" << std::endl;
+		return 0;
+	}
 
-	n.CPU.reset();
+	n.reset();
 
-	SoundManager soundMan;
-	n.APU.soundMan = &soundMan;
+	SoundManager soundMan("Nes Emulator");
 	soundMan.UserFunc = soundLoop;
 
 	//Open Window
@@ -159,7 +168,6 @@ int main(int argc, char** argv) {
 	GraphicsEngine::AddWindow(new MainWindow(APP_WIDTH,APP_HEIGHT,"Nes Emulator"));
 	GraphicsEngine::Run();
 
-	//glUnmapBuffer(GL_ARRAY_BUFFER);
 	glfwTerminate();
 	return 0;
 }

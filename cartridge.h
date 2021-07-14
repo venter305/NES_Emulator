@@ -5,6 +5,7 @@
 #include "./Mappers/mapper_000.h"
 #include "./Mappers/mapper_001.h"
 #include "./Mappers/mapper_002.h"
+#include "./Mappers/mapper_004.h"
 
 class NES;
 
@@ -68,7 +69,9 @@ class cartridge{
 		int ntMirrorMode;
 
 		std::string name;
-		mapper *Mapper;
+		std::string path;
+
+		Mapper *mapper;
 
 		NES *nes;
 
@@ -76,13 +79,20 @@ class cartridge{
 		~cartridge();
 		void reset();
 		bool readRom(std::string);
+
+		int PeekPrgMem(int);
 		int readPrgMem(int);
+		int PeekChrMem(int);
 		int readChrMem(int);
 		void cartWrite(int,int);
 		int getMirrorMode();
+		bool PollInterrupts();
 
 		void saveGame();
 		void loadGame();
+
+		void SaveState(std::ofstream &file);
+		void LoadState(std::ifstream &file);
 
 
 };

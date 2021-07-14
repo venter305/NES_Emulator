@@ -5,21 +5,6 @@
 
 using namespace std;
 
-/*Address Modes
-	0: Accumulator
-	1: absolute
-	2: absolute,X
-	3: absolute,Y
-	4: immediate
-	5: implied
-	6: indirect
-	7: X,indirect
-	8: indirect,Y
-	9: relative
-	10: zeropage
-	11: zeropage,X
-	12: zeropage,Y
-*/
 bool LOG = false;
 cpu::cpu(){
 	//Initialize CPU
@@ -28,14 +13,15 @@ cpu::cpu(){
 	s = 0xfd;
 	p = 0x24;
 	cycles = 0;
-	numCycles = 0;
-	vBlank = false;
-	instrAddr = 0;
-	instrVal = 0;
-	instrIndex = 0;
-	tmpPC = 0;
-	instrMode = 0;
-	
+
+	irqFlag = false;
+	//irqDelay = false;
+	//irqForce = false;
+	//nmiFlag = false;
+	nmiLine = true;
+	previousNMILine = true;
+
+
 	//List of opcodes
 	//{AddressMode,Instruction,numCycles}
 	opcodes = {
@@ -51,7 +37,7 @@ cpu::cpu(){
 						{&cpu::BCC,&cpu::rel,2},{&cpu::STA,&cpu::indY,6},{&cpu::NOP,&cpu::impl,2},{&cpu::NOP,&cpu::impl,2},{&cpu::STY,&cpu::zpgX,4},{&cpu::STA,&cpu::zpgX,4},{&cpu::STX,&cpu::zpgY,4},{&cpu::NOP,&cpu::impl,2},{&cpu::TYA,&cpu::impl,2},{&cpu::STA,&cpu::absY,5},{&cpu::TXS,&cpu::impl,2},{&cpu::NOP,&cpu::impl,2},{&cpu::NOP,&cpu::impl,2},{&cpu::STA,&cpu::absX,5},{&cpu::NOP,&cpu::impl,2},{&cpu::NOP,&cpu::impl,2},
 						{&cpu::LDY,&cpu::imm,2},{&cpu::LDA,&cpu::indX,6},{&cpu::LDX,&cpu::imm,2},{&cpu::NOP,&cpu::impl,2},{&cpu::LDY,&cpu::zpg,3},{&cpu::LDA,&cpu::zpg,3},{&cpu::LDX,&cpu::zpg,3},{&cpu::NOP,&cpu::impl,2},{&cpu::TAY,&cpu::impl,2},{&cpu::LDA,&cpu::imm,2},{&cpu::TAX,&cpu::impl,2},{&cpu::NOP,&cpu::impl,2},{&cpu::LDY,&cpu::abs,4},{&cpu::LDA,&cpu::abs,4},{&cpu::LDX,&cpu::abs,4},{&cpu::NOP,&cpu::impl,2},
 						{&cpu::BCS,&cpu::rel,2},{&cpu::LDA,&cpu::indY,5},{&cpu::NOP,&cpu::impl,2},{&cpu::NOP,&cpu::impl,2},{&cpu::LDY,&cpu::zpgX,4},{&cpu::LDA,&cpu::zpgX,4},{&cpu::LDX,&cpu::zpgY,4},{&cpu::NOP,&cpu::impl,2},{&cpu::CLV,&cpu::impl,2},{&cpu::LDA,&cpu::absY,4},{&cpu::TSX,&cpu::impl,2},{&cpu::NOP,&cpu::impl,2},{&cpu::LDY,&cpu::absX,4},{&cpu::LDA,&cpu::absX,4},{&cpu::LDX,&cpu::absY,4},{&cpu::NOP,&cpu::impl,2},
-						{&cpu::CPY,&cpu::imm,2},{&cpu::CMP,&cpu::indX,6},{&cpu::NOP,&cpu::impl,2},{&cpu::NOP,&cpu::impl,2},{&cpu::CPY,&cpu::zpg,3},{&cpu::CMP,&cpu::zpg,3},{&cpu::DEC,&cpu::zpg,5},{&cpu::NOP,&cpu::impl,2},{&cpu::INY,&cpu::impl,2},{&cpu::CMP,&cpu::imm,2},{&cpu::DEX,&cpu::acc,2},{&cpu::NOP,&cpu::impl,2},{&cpu::CPY,&cpu::abs,4},{&cpu::CMP,&cpu::abs,4},{&cpu::DEC,&cpu::abs,3},{&cpu::NOP,&cpu::impl,2},
+						{&cpu::CPY,&cpu::imm,2},{&cpu::CMP,&cpu::indX,6},{&cpu::NOP,&cpu::impl,2},{&cpu::NOP,&cpu::impl,2},{&cpu::CPY,&cpu::zpg,3},{&cpu::CMP,&cpu::zpg,3},{&cpu::DEC,&cpu::zpg,5},{&cpu::NOP,&cpu::impl,2},{&cpu::INY,&cpu::impl,2},{&cpu::CMP,&cpu::imm,2},{&cpu::DEX,&cpu::acc,2},{&cpu::NOP,&cpu::impl,2},{&cpu::CPY,&cpu::abs,4},{&cpu::CMP,&cpu::abs,4},{&cpu::DEC,&cpu::abs,6},{&cpu::NOP,&cpu::impl,2},
 						{&cpu::BNE,&cpu::rel,2},{&cpu::CMP,&cpu::indY,5},{&cpu::NOP,&cpu::impl,2},{&cpu::NOP,&cpu::impl,2},{&cpu::NOP,&cpu::impl,2},{&cpu::CMP,&cpu::zpgX,4},{&cpu::DEC,&cpu::zpgX,6},{&cpu::NOP,&cpu::impl,2},{&cpu::CLD,&cpu::impl,2},{&cpu::CMP,&cpu::absY,4},{&cpu::NOP,&cpu::impl,2},{&cpu::NOP,&cpu::impl,2},{&cpu::NOP,&cpu::impl,2},{&cpu::CMP,&cpu::absX,4},{&cpu::DEC,&cpu::absX,7},{&cpu::NOP,&cpu::impl,2},
 						{&cpu::CPX,&cpu::imm,2},{&cpu::SBC,&cpu::indX,6},{&cpu::NOP,&cpu::impl,2},{&cpu::NOP,&cpu::impl,2},{&cpu::CPX,&cpu::zpg,3},{&cpu::SBC,&cpu::zpg,3},{&cpu::INC,&cpu::zpg,5},{&cpu::NOP,&cpu::impl,2},{&cpu::INX,&cpu::impl,2},{&cpu::SBC,&cpu::imm,2},{&cpu::NOP,&cpu::impl,2},{&cpu::NOP,&cpu::impl,2},{&cpu::CPX,&cpu::abs,4},{&cpu::SBC,&cpu::abs,4},{&cpu::INC,&cpu::abs,6},{&cpu::NOP,&cpu::impl,2},
 						{&cpu::BEQ,&cpu::rel,2},{&cpu::SBC,&cpu::indY,5},{&cpu::NOP,&cpu::impl,2},{&cpu::NOP,&cpu::impl,2},{&cpu::NOP,&cpu::impl,2},{&cpu::SBC,&cpu::zpgX,4},{&cpu::INC,&cpu::zpgX,6},{&cpu::NOP,&cpu::impl,2},{&cpu::SED,&cpu::impl,2},{&cpu::SBC,&cpu::absY,4},{&cpu::NOP,&cpu::impl,2},{&cpu::NOP,&cpu::impl,2},{&cpu::NOP,&cpu::impl,2},{&cpu::SBC,&cpu::absX,4},{&cpu::INC,&cpu::absX,7},{&cpu::NOP,&cpu::impl,2}
@@ -61,89 +47,165 @@ cpu::cpu(){
 //Run next Instruction
 int cpu::runInstructions(){
 	//If valid pc
-	int extraCycles = 0;
-	if(pc){
+	if(pc || true){
 		//Log Instruction
 		if (cycles == 0){
-			if(LOG)cout << hex << pc << " A:"<< (int)a << " X:" << (int)x << " Y:" << (int)y << " 0x6000 " << nes->readMemory(0x6000) << dec << " PPU Cycles:"<< nes->PPU.cycles << " PPU Scanline:" << nes->PPU.scanlines << " PPU Frames:" << nes->PPU.frames <<" p:" << bitset <8> (p) << ' ';\
+			if(LOG)cout << hex << pc << " A:"<< (int)a << " X:" << (int)x << " Y:" << (int)y << " sp:" << (int)s  << ' ' << nes->peekMemory(0x0100+s+1) << dec << " PPU Cycles:"<< nes->PPU.cycles << " PPU Scanline:" << nes->PPU.scanlines << " PPU Frames:" << nes->PPU.frames <<" p:" << bitset <8> (p) << ' ';
+
+			extraCycles = 0;
+
+			//Load instruction value
 			int instr = nes->readMemory(pc++);
 			cycles = opcodes[instr].cycles;
-			
+
 			//Run Instruction
 			int extra1 = (this->*opcodes[instr].addrMode)();
 			int extra2 = (this->*opcodes[instr].opcode)();
-			extraCycles += extra1+extra2;
-			cycles += (extra1&extra2);
-			numCycles += cycles;
-			//Cycle PPU and APU
-			//nes->PPU.clock(3*cycles);
-			//nes->APU.clock(cycles);
+
+
+			//reset interrupt flags
+			irqFlag = false;
+			//nmiLine = false;
+			previousNMILine = nmiLine;
+
+			extraCycles += (extra1&extra2);
+			//add in extra cycles
+			cycles += extraCycles;
 		}
-		
+
 		cycles--;
 	}
 	return extraCycles;
 }
 
-//Interrupt Request
-void cpu::IRQ(){
-	//return if Interrupts are disabled
-	if (p & P_IRQ)
-		return;
-	
-	//Disable interupts
-	p |= (P_B2 | P_IRQ);
-	//Push PC to stack
-	nes->writeMemory(0x0100+s, pc/256);
-	s--;
-	nes->writeMemory(0x0100+s, pc%256);
-	s--;
-	//Push P register to stack
-	nes->writeMemory(0x0100+s, p);
-	s--;
+bool cpu::PollInterrupts(){
+	//if (!irqFlag)std::cout << irqFlag << std::endl;
+	//trigger NMI on edge
+	if (nes->CART.PollInterrupts())
+		irqFlag = true;
 
-	//Jump to Interupt address
-	pc = nes->readMemory(0xFFFE)+(nes->readMemory(0xFFFF)*256);
-	
-}
-
-//Non-maskable interrupt
-void cpu::NMI(){
-	//cycle PPU
-  nes->PPU.clock(3*8);
-	//Disable interupts
-	p |= (P_B2 | P_IRQ);
-	//Push PC to stack
-	nes->writeMemory(0x0100+s, pc/256);
-	s--;
-	nes->writeMemory(0x0100+s, pc%256);
-	s--;
-	//Push P register to stack
-	nes->writeMemory(0x0100+s, p);
-	s--;
-
-	//Jump to Interrupt address
-	pc = nes->readMemory(0xFFFA)+(nes->readMemory(0xFFFB)*256);
+	if(nmiLine == true && previousNMILine == false){
+		NMI();
+		return true;
+	}
+	if (irqFlag){
+			return IRQ();
+	}
+	return false;
 }
 
 //Reset CPU
 void cpu::reset(){
 	//Jump to Starting address
 	pc = nes->readMemory(0xFFFC)+(nes->readMemory(0xFFFD)*256);
+
 	a = 0;
 	x = 0;
 	y = 0;
 	s = 0xFD;
 	p = 0;
+
+	cycles = 0;
+	instrAddr = 0;
+	instrVal = 0;
+
+	irqFlag = false;
+	nmiLine = true;
+	previousNMILine = true;
 }
+
+void cpu::SaveState(std::ofstream &file){
+	file.write(reinterpret_cast<char*>(&cycles),sizeof(int));
+	file.write(reinterpret_cast<char*>(&extraCycles),sizeof(int));
+	file.write(reinterpret_cast<char*>(&instrAddr),sizeof(int));
+	file.write(reinterpret_cast<char*>(&instrVal),sizeof(int));
+	file.write(reinterpret_cast<char*>(&irqFlag),1);
+	file.write(reinterpret_cast<char*>(&nmiLine),1);
+	file.write(reinterpret_cast<char*>(&previousNMILine),1);
+	file.write(reinterpret_cast<char*>(&a),1);
+	file.write(reinterpret_cast<char*>(&x),1);
+	file.write(reinterpret_cast<char*>(&y),1);
+	file.write(reinterpret_cast<char*>(&s),1);
+	file.write(reinterpret_cast<char*>(&p),1);
+	file.write(reinterpret_cast<char*>(&pc),2);
+}
+
+void cpu::LoadState(std::ifstream &file){
+	file.read(reinterpret_cast<char*>(&cycles),sizeof(int));
+	file.read(reinterpret_cast<char*>(&extraCycles),sizeof(int));
+	file.read(reinterpret_cast<char*>(&instrAddr),sizeof(int));
+	file.read(reinterpret_cast<char*>(&instrVal),sizeof(int));
+	file.read(reinterpret_cast<char*>(&irqFlag),1);
+	file.read(reinterpret_cast<char*>(&nmiLine),1);
+	file.read(reinterpret_cast<char*>(&previousNMILine),1);
+	file.read(reinterpret_cast<char*>(&a),1);
+	file.read(reinterpret_cast<char*>(&x),1);
+	file.read(reinterpret_cast<char*>(&y),1);
+	file.read(reinterpret_cast<char*>(&s),1);
+	file.read(reinterpret_cast<char*>(&p),1);
+	file.read(reinterpret_cast<char*>(&pc),2);
+}
+
+//Interrupt Request
+bool cpu::IRQ(){
+	//return if Interrupts are disabled
+  if ((p & P_IRQ)){
+			return false;
+	}
+
+	//std::cout << "Scanlines: " << nes->PPU.scanlines << std::endl;
+
+	//Push PC to stack
+	nes->writeMemory(0x0100+s, pc/256);
+	s--;
+	nes->writeMemory(0x0100+s, pc%256);
+	s--;
+	//Push P register to stack
+	nes->writeMemory(0x0100+s, p);
+	s--;
+
+	//Disable interupts
+	p |= (P_B2 | P_IRQ);
+
+	//Jump to Interupt address
+	pc = nes->readMemory(0xFFFE)+(nes->readMemory(0xFFFF)*256);
+///std::cout << std::hex << pc << std::endl;
+
+	return true;
+
+}
+
+//Non-maskable interrupt
+void cpu::NMI(){
+	//cycle PPU
+  nes->PPU.Clock(3*8);
+	//Disable interupts
+	//Push PC to stack
+	nes->writeMemory(0x0100+s, pc/256);
+	s--;
+	nes->writeMemory(0x0100+s, pc%256);
+	s--;
+	//Push P register to stack
+	nes->writeMemory(0x0100+s, p);
+	s--;
+
+	p |= (P_B2 | P_IRQ);
+	//Jump to Interrupt address
+	pc = nes->readMemory(0xFFFA)+(nes->readMemory(0xFFFB)*256);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 //Address Modes
 //Implicit
 int cpu::impl(){
+	if(LOG) std::cout << " impl ";
 	return 0;
 }
 
 //Accumulator
 int cpu::acc(){
+	if(LOG) std::cout << " acc ";
 	instrAddr = -1;
 	instrVal = a;
 	return 0;
@@ -151,31 +213,34 @@ int cpu::acc(){
 
 //Absolute
 int cpu::abs(){
+	if(LOG) std::cout << " abs ";
 	int x1 = nes->readMemory(pc++);
 	int x2 = nes->readMemory(pc++);
 	instrAddr = (x2*256)+x1;
-	instrVal = nes->readMemory((x2*256)+x1);
+	instrVal = -1;
 	return 0;
 }
 
 //Absolute X
 int cpu::absX(){
+	if(LOG) std::cout << " absX ";
 	int x1 = nes->readMemory(pc++);
 	int x2 = nes->readMemory(pc++);
 	instrAddr = (x2*256)+x1+x;
-	instrVal = nes->readMemory((x2*256)+x1+x);
+	instrVal = -1;
 	if (x1+x > 0xFF)
 		return 1;
 	else
 		return 0;
-}	
+}
 
 //Absolute Y
 int cpu::absY(){
+	if(LOG) std::cout << " absY ";
 	int x1 = nes->readMemory(pc++);
 	int x2 = nes->readMemory(pc++);
 	instrAddr = ((x2*256)+x1+y)%0x10000;
-	instrVal = nes->readMemory(instrAddr);
+	instrVal = -1;
 	if (x1+y > 0xFF)
 		return 1;
 	else
@@ -184,6 +249,7 @@ int cpu::absY(){
 
 //Immediate
 int cpu::imm(){
+	if(LOG) std::cout << " imm ";
 	instrVal = nes->readMemory(pc++);
 	instrAddr = -2;
 	return 0;
@@ -191,36 +257,38 @@ int cpu::imm(){
 
 //Indirect
 int cpu::ind() {
+	if(LOG) std::cout << " ind ";
 	int x1 = nes->readMemory(pc++);
 	int x2 = nes->readMemory(pc++);
 	int addr = (x2*256)+x1;
 	if (x1 == 0xff){
 		int addr1 = (x2*256);
-		instrAddr = ((nes->readMemory(addr1)*256)+nes->readMemory(addr));
-		instrVal = nes->readMemory(((nes->readMemory(addr1)*256)+nes->readMemory(addr)));
+		instrAddr = (nes->readMemory(addr1)*256)+nes->readMemory(addr);
 	}
 	else{
 		instrAddr = ((nes->readMemory(addr+1)*256)+nes->readMemory(addr));
-		instrVal = nes->readMemory((nes->readMemory(addr+1)*256)+nes->readMemory(addr));
 	}
+	instrVal = -1;
 	return 0;
 }
 
 //Indirect X
 int cpu::indX(){
+	if(LOG) std::cout << " indX ";
 	int x1 = nes->readMemory(pc++);
 	int addr = (x1+x)%256;
 	instrAddr = (nes->readMemory((addr+1)%256)*256)+nes->readMemory(addr);
-	instrVal = nes->readMemory((nes->readMemory((addr+1)%256)*256)+nes->readMemory(addr));
+	instrVal = -1;
 	return 0;
 }
 
 //Indirect Y
 int cpu::indY(){
+	if(LOG) std::cout << " indY ";
 	int x1 = nes->readMemory(pc++);
 	int addr = x1;
 	instrAddr = ((nes->readMemory((addr+1)%256)*256)+nes->readMemory(addr)+y)&0xFFFF;
-	instrVal = nes->readMemory(((nes->readMemory((addr+1)%256)*256)+nes->readMemory(addr)+y)&0xFFFF);
+	instrVal = -1;
 	if (addr+y > 0xFF)
 		return 1;
 	else
@@ -229,6 +297,7 @@ int cpu::indY(){
 
 //Relative
 int cpu::rel(){
+	if(LOG) std::cout << " rel ";
 	int x1 = nes->readMemory(pc++);
 	if (x1 & 0x80)
 		x1 = x1-0x100;
@@ -238,6 +307,7 @@ int cpu::rel(){
 
 //Zero page
 int cpu::zpg(){
+	if(LOG) std::cout << " zpg ";
 	int x1 = nes->readMemory(pc++);
 	instrAddr = x1;
 	instrVal = nes->readMemory(x1);
@@ -246,52 +316,54 @@ int cpu::zpg(){
 
 //Zero page X
 int cpu::zpgX(){
+	if(LOG) std::cout << " zpgX ";
 	int x1 = nes->readMemory(pc++);
 	instrAddr = (x1+x)%256;
-	instrVal = nes->readMemory((x1+x)%256);
+	instrVal = nes->readMemory(instrAddr);
 	return 0;
 }
 
 //Zero page Y
 int cpu::zpgY(){
+	if(LOG) std::cout << " zpgY ";
 	int x1 = nes->readMemory(pc++);
 	instrAddr = (x1+y)%256;
-	instrVal = nes->readMemory((x1+y)%256);
+	instrVal = nes->readMemory(instrAddr);
 	return 0;
 }
-
+//
 //Add with Carry
 int cpu::ADC(){
 	//Log Instruction
 	if(LOG)cout << "ADC" << endl;
+	if(instrVal == -1) instrVal = nes->readMemory(instrAddr);
 	//Add with a register and Carry flag
 	int tmp = a + instrVal + (p & P_CARRY);
 	//Set overflow flag
-	if (a <= 127 && instrVal <= 127 && tmp > 127){
+	if (a <= 127 && instrVal <= 127 && tmp > 127)
 		p |= P_OVERFLOW;
-	}
-	else if (a > 127 && instrVal > 127 && tmp <= 127) {
+	else if (a > 127 && instrVal > 127 && tmp <= 127)
 		p |= P_OVERFLOW;
-	}
-	else {
+	else
 		p &= ~P_OVERFLOW;
-		}
-	
+
 	//Store in A register
 	a = tmp;
-	
+
 	//Set flags
-	if (tmp >= 256){
+	if (tmp >= 256)
 		p |= P_CARRY;
-	}
 	else
 		p &= ~P_CARRY;
-	
+
 	if (a == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
-  
+
 	p &= ~P_NEGATIVE;
-	p |= (a & 0b10000000);
+	p |= (a & P_NEGATIVE);
+
+	//Poll for interrupts
+	PollInterrupts();
 	return 1;
 }
 
@@ -299,15 +371,21 @@ int cpu::ADC(){
 int cpu::AND(){
 	//Log Instruction
 	if(LOG)cout << "AND" << endl;
+	if(instrVal == -1) instrVal = nes->readMemory(instrAddr);
+
 	//AND A with value
 	a &= (0xFF&instrVal);
-	
+
 	//Set flags
 	if (a == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
 
 	p &= ~P_NEGATIVE;
-	p |= (a & 0b10000000);
+	p |= (a & P_NEGATIVE);
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 1;
 }
 
@@ -315,6 +393,7 @@ int cpu::AND(){
 int cpu::ASL(){
 	//Log Instruction
 	if(LOG)cout << "ASL" << endl;
+	if(instrVal == -1) instrVal = nes->readMemory(instrAddr);
 	//Clear Negative and Carry
 	p &= ~(P_NEGATIVE | P_CARRY);
 	//Set Carry Flag to the MSB of instrVal
@@ -325,9 +404,13 @@ int cpu::ASL(){
 	if (instrAddr == -1) a = 0xFF&instrVal;
 	else nes->writeMemory(instrAddr,instrVal);
 	//Set Flags
-	p |= (instrVal & 0b10000000);
+	p |= (instrVal & P_NEGATIVE);
 	if (instrVal == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -335,30 +418,38 @@ int cpu::ASL(){
 int cpu::BCC(){
 	//Log instruction
 	if(LOG)cout << "BCC" << endl;
-	//Return if Carry is set
-	if ((p & P_CARRY))
-		return 0;
-	//Add extra cycle if new address is not on Zero page
-	if ((pc&0x00FF) != ((pc+instrVal)&0x00FF))
-		cycles++;
-	//Jump to new address
-	pc += instrVal;
-	return 1;
+	if (!(p & P_CARRY)) {
+		//Add extra cycle if new address crosses page boundry
+		extraCycles++;
+		if ((pc&0xFF00) != ((pc+instrVal)&0xFF00))
+			extraCycles++;
+		//Jump to new address
+		pc += instrVal;
+	}
+
+	//Poll for interrupts
+	PollInterrupts();
+
+	return 0;
 }
 
 //Branch if Carry Set
 int cpu::BCS(){
 	//Log Instruction
 	if(LOG)cout << "BCS" << endl;
-	//Return if Carry is clear
-	if (!(p & P_CARRY))
-		return 0;
-	//Add extra cycle if new address is not on Zero page
-	if ((pc&0x00FF) != ((pc+instrVal)&0x00FF))
-		cycles++;
-	//Jump to new address
-	pc += instrVal;
-	return 1;
+	if ((p & P_CARRY)){
+		//Add extra cycle if new address crosses page boundry
+		extraCycles++;
+		if ((pc&0xFF00) != ((pc+instrVal)&0xFF00))
+			extraCycles++;
+		//Jump to new address
+		pc += instrVal;
+	}
+
+	//Poll for interrupts
+	PollInterrupts();
+
+	return 0;
 }
 
 //Branch if Equal
@@ -366,94 +457,120 @@ int cpu::BEQ(){
 	//Log Instruction
 	if(LOG)cout << "BEQ" << endl;
 	//Return if Zero is clear
-	if (!(p & 0b00000010))
-		return 0;
-	//Add extra cycle if new address is not on Zero page
-	if ((pc&0x00FF) != ((pc+instrVal)&0x00FF))
-		cycles++;
-	//Jump to new address
-	pc += instrVal;
-	return 1;
-}
+	if ((p & 0b00000010)){
+		//Add extra cycle if new address crosses page boundry
+		extraCycles++;
+		if ((pc&0xFF00) != ((pc+instrVal)&0xFF00))
+			extraCycles++;
+		//Jump to new address
+		pc += instrVal;
+	}
 
+	//Poll for interrupts
+	PollInterrupts();
+
+	return 0;
+}
+//
 //Bit Test
 int cpu::BIT(){
 	//Log Instruction
 	if(LOG)cout << "BIT" << endl;
+	if(instrVal == -1) instrVal = nes->readMemory(instrAddr);
 	//Clear Flags
 	p &= ~(P_NEGATIVE | P_OVERFLOW | P_ZERO);
 	//Set Negative and overflow flags
-	p |= (instrVal & 0b11000000);
-	//Clear MSB of PPU Reg 0x2002
-	if (instrAddr == 0x2002)
-		nes->writeMemory(0x2002, *ppuReg2002&0x7F);
+	p |= (instrVal & (P_NEGATIVE | P_OVERFLOW));
 	//Set Zero Flag
-	if (!(a & instrVal)) p |= P_ZERO; 
+	if (!(a & instrVal)) p |= P_ZERO;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
-
+//
 //Branch if Minus
 int cpu::BMI(){
 	//Log Instruction
 	if(LOG)cout << "BMI" << endl;
-	//Return if Negative is clear
-	if (!(p & P_NEGATIVE))
-		return 0;
-	//Add extra cycle if new address is not on Zero page
-	if ((pc&0x00FF) != ((pc+instrVal)&0x00FF))
-		cycles++;
-	//Jump to new address
-	pc += instrVal;
-	return 1;
+	if ((p & P_NEGATIVE)){
+		//Add	extra cycle if new address crosses page boundry
+		extraCycles++;
+		if ((pc&0xFF00) != ((pc+instrVal)&0xFF00))
+			extraCycles++;
+		//Jump to new address
+		pc += instrVal;
+	}
+	//Poll for interrupts
+	PollInterrupts();
+
+	return 0;
 }
 
 //Branch if not equal
 int cpu::BNE(){
 	//Log Instruction
 	if(LOG)cout << "BNE" << endl;
-	//Return if Zero is Set
-	if ((p & P_ZERO))
-		return 0;
-	//Add extra cycle if new address is not on Zero page
-	if ((pc&0x00FF) != ((pc+instrVal)&0x00FF))
-		cycles++;
-	//Jump to new address
-	pc += instrVal;
-	return 1;
+	if (!(p & P_ZERO)){
+		//Add extra cycle if new address crosses page boundry
+		extraCycles++;
+		if ((pc&0xFF00) != ((pc+instrVal)&0xFF00))
+			extraCycles++;
+		//Jump to new address
+		pc += instrVal;
+	}
+
+	//Poll for interrupts
+	PollInterrupts();
+
+	return 0;
 }
 
 //Branch if positive
 int cpu::BPL(){
 	//Log Instruction
-	if(LOG)cout << "BPL" << endl;
-	//Return if Negative is Set
-	if ((p & P_NEGATIVE))
-		return 0;
-	//Add extra cycle if new address is not on Zero page
-	if ((pc&0x00FF) != ((pc+instrVal)&0x00FF))
-		cycles++;
-	//Jump to new address
-	pc += instrVal;
-	return 1;
+	if(LOG)cout << "BPL" << " " << instrAddr << " " << instrVal << endl;
+	if (!(p & P_NEGATIVE)){
+		//Add extra cycle if new address crosses page boundry
+		extraCycles++;
+		if ((pc&0xFF00) != ((pc+instrVal)&0xFF00))
+			extraCycles++;
+		//Jump to new address
+		pc += instrVal;
+	}
+	//Poll for interrupts
+	PollInterrupts();
+
+	return 0;
 }
 
 //Force Interrupt
 int cpu::BRK(){
 	//Log Instruction
 	if(LOG)cout << "BRK" << endl;
-	//Set Flags
-	p |= (P_B2 | P_B1 | P_IRQ);
-	//Write PC and P registers to stack
+
 	pc++;
+
+	//Push PC to stack
 	nes->writeMemory(0x0100+s, pc/256);
 	s--;
 	nes->writeMemory(0x0100+s, pc%256);
 	s--;
+	//Push P register to stack
 	nes->writeMemory(0x0100+s, p);
 	s--;
-	
-	//Jump to Interrupt addresss
-	pc = nes->readMemory(0xFFFE)+(nes->readMemory(0xFFFF)*256);
+
+	//Disable interupts
+	p |= (P_B1 | P_IRQ);
+
+	//Jump to Interupt address
+	//NMI interrupt
+	if(nmiLine == true && previousNMILine == false)
+		pc = nes->readMemory(0xFFFA)+(nes->readMemory(0xFFFB)*256);
+	else
+		pc = nes->readMemory(0xFFFE)+(nes->readMemory(0xFFFF)*256);
+
 	return 0;
 }
 
@@ -461,30 +578,38 @@ int cpu::BRK(){
 int cpu::BVC(){
 	//Log Instruction
 	if(LOG)cout << "BVC" << endl;
-	//Return if Overflow is Set
-	if ((p & P_OVERFLOW))
-		return 0;
-	//Add extra cycle if new address is not on Zero page
-	if ((pc&0x00FF) != ((pc+instrVal)&0x00FF))
-		cycles++;
-	//Jump to new address
-	pc += instrVal;
-	return 1;
+	if (!(p & P_OVERFLOW)){
+		//Add extra cycle if new address is not on Zero page
+		extraCycles++;
+		if ((pc&0xFF00) != ((pc+instrVal)&0xFF00))
+			extraCycles++;
+		//Jump to new address
+		pc += instrVal;
+	}
+
+	//Poll for interrupts
+	PollInterrupts();
+
+	return 0;
 }
 
 //Branch if Overflow Set
 int cpu::BVS(){
 	//Log Instruction
 	if(LOG)cout << "BVS" << endl;
-	//Return if Overflow is Clear
-	if (!(p & P_OVERFLOW))
-		return 0;
-	//Add extra cycle if new address is not on Zero page
-	if ((pc&0x00FF) != ((pc+instrVal)&0x00FF))
-		cycles++;
-	//Jump to new address
-	pc += instrVal;
-	return 1;
+	if ((p & P_OVERFLOW)){
+		//Add extra cycle if new address is not on Zero page
+		extraCycles++;
+		if ((pc&0xFF00) != ((pc+instrVal)&0xFF00))
+			extraCycles++;
+		//Jump to new address
+		pc += instrVal;
+	}
+
+	//Poll for interrupts
+	PollInterrupts();
+
+	return 0;
 }
 
 //Clear Carry flag
@@ -492,6 +617,10 @@ int cpu::CLC(){
 	//Log Instruction
 	if(LOG)cout << "CLC" << endl;
 	p &= ~P_CARRY;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -500,6 +629,10 @@ int cpu::CLD(){
 	//Log Instruction
 	if(LOG)cout << "CLD" << endl;
 	p &= ~P_DECIMAL;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -507,7 +640,18 @@ int cpu::CLD(){
 int cpu::CLI(){
 	//Log Instruction
 	if(LOG)cout << "CLI" << endl;
+	// if((p & P_IRQ))irqDelay = true;
+	// else irqDelay = false;
+
+	//Poll for interrupts before clearing interrupt flag
+	int tmpP = p&~P_IRQ;
+	if (PollInterrupts()){
+		nes->writeMemory(0x0100+s+1,tmpP);
+		return 0;
+	}
+
 	p &= ~P_IRQ;
+
 	return 0;
 }
 
@@ -516,23 +660,32 @@ int cpu::CLV(){
 	//Log Instruction
 	if(LOG)cout << "CLV" << endl;
 	p &= ~P_OVERFLOW;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
 //Compare
 int cpu::CMP(){
 	//Log Instruction
-	if(LOG)cout << "CMP" << endl;	
-	//Subtract instrVal from A 
+	if(LOG)cout << "CMP" << endl;
+	if(instrVal == -1) instrVal = nes->readMemory(instrAddr);
+	//Subtract instrVal from A
 	int diff = a - instrVal;
 	//Set Negative flag to MSB of diff
 	p &= ~P_NEGATIVE;
-	p |= (diff & 0b10000000);
+	p |= (diff & P_NEGATIVE);
 	//Set Flags
 	if (diff == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
 	if (diff >= 0) p |= P_CARRY;
-	else p &= ~P_CARRY;	
+	else p &= ~P_CARRY;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 1;
 }
 
@@ -540,33 +693,43 @@ int cpu::CMP(){
 int cpu::CPX(){
 	//Log Instruction
 	if(LOG)cout << "CPX" << endl;
+	if(instrVal == -1) instrVal = nes->readMemory(instrAddr);
 	//Subtract instrVal from A
 	int diff = x - instrVal;
 	//Set Negative flag to MSB of diff
 	p &= ~P_NEGATIVE;
-	p |= (diff & 0b10000000);
+	p |= (diff & P_NEGATIVE);
 	//Set Flags
 	if (diff == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
-	if (diff >= 0) p |= P_CARRY;	
-	else p &= ~P_CARRY;	
+	if (diff >= 0) p |= P_CARRY;
+	else p &= ~P_CARRY;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
 //Compare Y Register
 int cpu::CPY(){
 	//Log Instruction
-	if(LOG)cout << "CPY" << endl;	
+	if(LOG)cout << "CPY" << endl;
+	if(instrVal == -1) instrVal = nes->readMemory(instrAddr);
 	//Subtract instrVal from A
 	int diff = y - instrVal;
 	//Set Negative flag to MSB of diff
 	p &= ~P_NEGATIVE;
-	p |= (diff & 0b10000000);
+	p |= (diff & P_NEGATIVE);
 	//Set Flags
 	if (diff == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
-	if (diff >= 0) p |= P_CARRY;	
-	else p &= ~P_CARRY;	
+	if (diff >= 0) p |= P_CARRY;
+	else p &= ~P_CARRY;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -581,10 +744,14 @@ int cpu::DEC(){
 		nes->writeMemory(instrAddr, nes->readMemory(instrAddr)-1);
 	//Set Negative flag to MSB of the memory at instrAddr
 	p &= ~P_NEGATIVE;
-	p |= (nes->readMemory(instrAddr) & 0b10000000);
+	p |= (nes->readMemory(instrAddr) & P_NEGATIVE);
 	//Set Zero flag
 	if (nes->readMemory(instrAddr) == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -599,10 +766,14 @@ int cpu::DEX(){
 		x--;
 	//Set Negative flag to MSB of X Register
 	p &= ~P_NEGATIVE;
-	p |= (x & 0b10000000);
+	p |= (x & P_NEGATIVE);
 	//Set Zero flag
 	if (x == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -617,10 +788,14 @@ int cpu::DEY(){
 		y--;
 	//Set Negative flag to MSB of Y Register
 	p &= ~P_NEGATIVE;
-	p |= (y & 0b10000000);
+	p |= (y & P_NEGATIVE);
 	//Set Zero flag
 	if (y == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -628,6 +803,7 @@ int cpu::DEY(){
 int cpu::EOR(){
 	//Log Instruction
 	if(LOG)cout << "EOR" << endl;
+	if(instrVal == -1) instrVal = nes->readMemory(instrAddr);
 	//Exclusive OR with instrVal
 	a ^= (0xFF&instrVal);
 	//Set Zero Flags
@@ -635,7 +811,11 @@ int cpu::EOR(){
 	else p &= ~P_ZERO;
 	//Set Negative flag to MSB of A Register
 	p &= ~P_NEGATIVE;
-	p |= (a & 0b10000000);
+	p |= (a & P_NEGATIVE);
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 1;
 }
 
@@ -645,15 +825,19 @@ int cpu::INC(){
 	if(LOG)cout << "INC" << endl;
 	//Increment Memory
 	nes->writeMemory(instrAddr, nes->readMemory(instrAddr)+1);
-	//Wrap value if greater them 256
-	if (nes->readMemory(instrAddr) >= 256)
-		nes->writeMemory(instrAddr, nes->readMemory(instrAddr) - 256);
+	//Wrap value if greater then 255
+	if (nes->readMemory(instrAddr) > 0xFF)
+		nes->writeMemory(instrAddr, nes->readMemory(instrAddr) - 0x100);
 	//Set Negative flag to MSB of memory value
 	p &= ~P_NEGATIVE;
-	p |= (nes->readMemory(instrAddr) & 0b10000000);
+	p |= (nes->readMemory(instrAddr) & P_NEGATIVE);
 	//Set Zero flag
 	if (nes->readMemory(instrAddr) == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -665,10 +849,14 @@ int cpu::INX(){
 	x++;
 	//Set Negative flag to MSB of X register
 	p &= ~P_NEGATIVE;
-	p |= (x & 0b10000000);
+	p |= (x & P_NEGATIVE);
 	//Set Zero flag
 	if (x == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -680,10 +868,14 @@ int cpu::INY(){
 	y++;
 	//Set Negative flag to MSB of Y Register
 	p &= ~P_NEGATIVE;
-	p |= (y & 0b10000000);
+	p |= (y & P_NEGATIVE);
 	//Set Zero flag
 	if (y == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -693,6 +885,10 @@ int cpu::JMP(){
 	if(LOG)cout << "JMP" << endl;
 	//Jump to instrAddr
 	pc = instrAddr;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -702,51 +898,37 @@ int cpu::JSR(){
 	if(LOG)cout << "JSR" << endl;
 	//Push PC to stack
 	pc--;
-	nes->writeMemory(0x0100+s, pc/256);
+	nes->writeMemory(0x0100+s, pc/0x100);
 	s--;
-	nes->writeMemory(0x0100+s, pc%256);
+	nes->writeMemory(0x0100+s, pc%0x100);
 	s--;
 	//Jump to instrAddr
 	pc = instrAddr;
-	return 0;
-	
-}
 
+	//Poll for interrupts
+	PollInterrupts();
+
+	return 0;
+
+}
+//
 //Load Accumulator
 int cpu::LDA(){
 	//Log Instruction
 	if(LOG)cout << "LDA " << hex << instrAddr << ' ' << instrVal << endl;
-	//Read controllers
-	if (instrAddr == 0x4016 || instrAddr == 0x4017)
-		a = 0xFF&nes->CONTRL.readController(instrAddr-0x4016);
+ if(instrVal == -1) instrVal = nes->readMemory(instrAddr);
 	//Load A with instrVal
-	else
-		a = 0xFF&instrVal;
-	//Clear MSB of PPU Reg 0x2002
-	if (instrAddr == 0x2002){
-		nes->writeMemory(0x2002, *ppuReg2002& 0b01111111);
-		nes->PPU.w = 0;
-	}
-	//Read from PPU VRAM
-	else if (instrAddr == 0x2007){
-		//Read from VBuffer
-		if (nes->PPU.v < 0x3f00) a = 0xFF&nes->PPU.vBuffer;
-		//Read from VRAM
-		else a = 0xFF&nes->PPURead(nes->PPU.v%0x4000);
-		//Set VBuffer equal to VRAM
-		nes->PPU.vBuffer = nes->PPURead(nes->PPU.v%0x3f00);
-		//Increment PPU VRAM by value in 0x2000
-		if (*ppuReg2000 & 0b00000100)
-			nes->PPU.v += 32;
-		else
-			nes->PPU.v++;
-	}
+	a = 0xFF&instrVal;
 	//Set Negative flag to MSB of A register
 	p &= ~P_NEGATIVE;
-	p |= (a & 0b10000000);
+	p |= (a & P_NEGATIVE);
 	//Set Zero flag
 	if (a == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 1;
 }
 
@@ -754,37 +936,18 @@ int cpu::LDA(){
 int cpu::LDX(){
 	//Log Instruction
 	if(LOG)cout << "LDX" << endl;
-	//Read controllers
-	if (instrAddr == 0x4016 || instrAddr == 0x4017)
-		x = nes->CONTRL.readController(instrAddr-0x4016);
-	//Load X register
-	else
-		x = instrVal;
-	//Clear MSB of PPU Reg 0x20002
-	if (instrAddr == 0x2002){
-		nes->writeMemory(0x2002, *ppuReg2002 & 0b01111111);
-		nes->PPU.w = 0;
-	}
-	//Read from PPU VRAM
-	else if (instrAddr == 0x2007){
-		//Read from PPU VBuffer
-		if (nes->PPU.v < 0x3f00) x = nes->PPU.vBuffer;
-		//Read from PPU VRAM
-		else x = nes->PPURead(nes->PPU.v%0x4000);
-		//Set PPU VBuffer equal to VRAM
-		nes->PPU.vBuffer = nes->PPURead(nes->PPU.v%0x3f00);	
-		//Incrememnt VRAM by value in 0x2000
-		if (*ppuReg2000 & 0b00000100)
-			nes->PPU.v += 32;
-		else
-			nes->PPU.v++;
-	}
+	if(instrVal == -1) instrVal = nes->readMemory(instrAddr);
+	x = 0xFF&instrVal;
 	//Set Negative flag to MSB of X Register
 	p &= ~P_NEGATIVE;
-	p |= (x & 0b10000000);
+	p |= (x & P_NEGATIVE);
 	//Set Zero flag
 	if (x == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 1;
 }
 
@@ -792,63 +955,53 @@ int cpu::LDX(){
 int cpu::LDY(){
 	//Log Instruction
 	if(LOG)cout << "LDY" << endl;
-	//Read controllers
-	if (instrAddr == 0x4016 || instrAddr == 0x4017)
-		y = nes->CONTRL.readController(instrAddr-0x4016);
-	//Load Y Register
-	else
-		y = instrVal;
-	//Clear MSB of PPU Reg 0x2002
-	if (instrAddr == 0x2002){
-		nes->writeMemory(0x2002, *ppuReg2002 & 0b01111111);
-		nes->PPU.w = 0;
-	}
-	//Read from PPU VRAM
-	else if (instrAddr == 0x2007){
-		//Read from VBuffer
-		if (nes->PPU.v < 0x3f00) y = nes->PPU.vBuffer;
-		//Read from VRAM
-		else y = nes->PPURead(nes->PPU.v%0x4000);
-		//Set VBuffer equal to VRAM
-		nes->PPU.vBuffer = nes->PPURead(nes->PPU.v%0x3f00);
-		//Increment VRAM by value in 0x2000
-		if (*ppuReg2000 & 0b00000100)
-			nes->PPU.v += 32;
-		else
-			nes->PPU.v++;
-	}
+	if(instrVal == -1) instrVal = nes->readMemory(instrAddr);
+	y = 0xFF&instrVal;
 	//Set Negative flag to MSB of Y Register
 	p &= ~P_NEGATIVE;
-	p |= (y & 0b10000000);
+	p |= (y & P_NEGATIVE);
 	//Set Zero flag
 	if (y == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 1;
 }
-
+//
 //Logical Shift Right
 int cpu::LSR(){
 	//Log Instruction
-	if(LOG)cout << "LSR" << endl;	
+	if(LOG)cout << "LSR" << endl;
+	if(instrVal == -1) instrVal = nes->readMemory(instrAddr);
 	//Clear Negative and Carry flags
 	p &= ~(P_NEGATIVE | P_CARRY);
 	//Set Carry flag equal to LSB of instrVal
-	p |= (instrVal & 0b00000001);
+	p |= (instrVal & 0b0000001);
 	//Shift instrVal to the right
 	instrVal = (instrVal>>1) & 0b01111111;
 	//Store instrVal
-	if (instrAddr == -1) a = 0xFF&instrVal; 
+	if (instrAddr == -1) a = 0xFF&instrVal;
 	else nes->writeMemory(instrAddr, instrVal);
 	//Set Zero flag
 	if (instrVal == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
 //No operation
 int cpu::NOP(){
-	//Log Instruction	
+	//Log Instruction
 	if(LOG)cout << "NOP" << endl;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -856,6 +1009,7 @@ int cpu::NOP(){
 int cpu::ORA(){
 	//Log Instruction
 	if(LOG)cout << "ORA" << endl;
+	if(instrVal == -1) instrVal = nes->readMemory(instrAddr);
 	//OR A with instrVal
 	a |= (0xFF&instrVal);
 	//Set Zero flag
@@ -863,9 +1017,13 @@ int cpu::ORA(){
 	else p &= ~P_ZERO;
 	//Set Negative flag to MSB of A register
 	p &= ~P_NEGATIVE;
-	p |= (a & 0b10000000);
+	p |= (a & P_NEGATIVE);
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 1;
-}	
+}
 
 //Push Accumlator
 int cpu::PHA(){
@@ -874,6 +1032,10 @@ int cpu::PHA(){
 	//Push A to stack
 	nes->writeMemory(0x0100+s, a);
 	s--;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -886,6 +1048,10 @@ int cpu::PHP(){
 	//Push P register
 	nes->writeMemory(0x0100+s, p);
 	s--;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -901,7 +1067,11 @@ int cpu::PLA(){
 	else p &= ~P_ZERO;
 	//Set Negative flag to MSB of A register
 	p &= ~P_NEGATIVE;
-	p |= (a & 0b10000000);
+	p |= (a & P_NEGATIVE);
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -910,8 +1080,20 @@ int cpu::PLP(){
 	//Log Instruction
 	if(LOG)cout << "PLP" << endl;
 	//Pull P register from stack
+	//int tmpP = p;
+
 	s++;
-	p = nes->readMemory(0x0100+s);
+	int tmpP = nes->readMemory(0x0100+s);
+
+	//Poll for interrupts before setting p register
+	if (PollInterrupts()){
+		//set stored p register
+		nes->writeMemory(0x0100+s+1,tmpP);
+		return 0;
+	}
+
+	p = tmpP;
+
 	return 0;
 }
 
@@ -919,12 +1101,13 @@ int cpu::PLP(){
 int cpu::ROL(){
 	//Log Instruction
 	if(LOG)cout << "ROL" << endl;
+	if(instrVal == -1) instrVal = nes->readMemory(instrAddr);
 	//Get Carry flag
 	int m = (p & P_CARRY);
 	//Clear Negative and Carry flags
 	p &= ~(P_NEGATIVE | P_CARRY);
 	//Set Carry flag to MSB of instrVal
-	p |= ((instrVal & 0b10000000)>>7);	
+	p |= ((instrVal & 0b10000000)>>7);
 	//Shift instrVal to the left
 	instrVal = (instrVal<<1) & 0b11111110;
 	//Set LSB of instrVal to original carry value
@@ -937,6 +1120,10 @@ int cpu::ROL(){
 	else p &= ~P_ZERO;
 	//Set Negative flag to MSB of instrVal
 	p |= (instrVal & 0b10000000);
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -944,6 +1131,7 @@ int cpu::ROL(){
 int cpu::ROR(){
 	//Log Instruction
 	if(LOG)cout << "ROR" << endl;
+	if(instrVal == -1) instrVal = nes->readMemory(instrAddr);
 	//Get Carry flag
 	uint8_t n = 0;
 	n |= (p & P_CARRY) << 7;
@@ -963,10 +1151,14 @@ int cpu::ROR(){
 	//Set Zero flag
 	if (instrVal == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
-//Return from Interrupt 
+//Return from Interrupt
 int cpu::RTI(){
 	//Log Instruction
 	if(LOG)cout << "RTI" << endl;
@@ -976,20 +1168,28 @@ int cpu::RTI(){
 	s++;
 	pc = nes->readMemory(0x0100+s);
 	s++;
-	pc += (nes->readMemory(0x0100+s)*256);
+	pc += (nes->readMemory(0x0100+s)*0x100);
+
+	//Poll for interrupts after pulling p register
+	PollInterrupts();
+
 	return 0;
 }
 
 //Return from Subroutine
 int cpu::RTS(){
 	//Log Instruction
-	if(LOG)cout << "RTS" << endl;	
+	if(LOG)cout << "RTS" << endl;
 	//Pull PC from stack
 	s++;
 	pc = nes->readMemory(0x0100+s);
-	s++; 
-	pc += (nes->readMemory(0x0100+s)*256);
+	s++;
+	pc += (nes->readMemory(0x0100+s)*0x100);
 	pc++;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -997,27 +1197,32 @@ int cpu::RTS(){
 int cpu::SBC(){
 	//Log Instruction
 	if(LOG)cout << "SBC" << endl;
+	if(instrVal == -1) instrVal = nes->readMemory(instrAddr);
 	//Subtract A,value and the carry flag
 	int value = instrVal ^ 0x00FF;
 	int tmp = a + value + (p & P_CARRY);
 	//Set Overflow flag
 	if ((a^tmp)&(value^tmp)&0x80)
 		p |= P_OVERFLOW;
-	else 
+	else
 		p &= ~P_OVERFLOW;
 	a = 0xFF&tmp;
-	if (tmp >= 256){
+	if (tmp >= 0x100){
 		p |= P_CARRY;
 	}
 	else
 		p &= ~P_CARRY;
-	
+
 	//Set Zero flag
 	if (a == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
   //Set Negative flag to MSB of A register
 	p &= ~P_NEGATIVE;
-	p |= (a & 0b10000000);
+	p |= (a & P_NEGATIVE);
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 1;
 }
 
@@ -1026,6 +1231,10 @@ int cpu::SEC(){
 	//Log Instruction
 	if(LOG)cout << "SEC" << endl;
 	p |= P_CARRY;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -1034,31 +1243,40 @@ int cpu::SED(){
 	//Log Instruction
 	if(LOG)cout << "SED" << endl;
 	p |= P_DECIMAL;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
 //Set Interrupt Disable
 int cpu::SEI(){
 	if(LOG)cout << "SEI" << endl;
+	//if (irqFlag == false)
+	// if(!(p & P_IRQ))irqForce = true;
+	// else irqForce = false;
+
+	//Poll for interrupts before setting interrupt flag
+	if (PollInterrupts()){
+		nes->writeMemory(0x0100+s+1,p|P_IRQ);
+		return 0;
+	}
+
 	p |= P_IRQ;
+
 	return 0;
 }
-
+//
 //Store Accumulator
 int cpu::STA(){
 	//Log Instruction
 	if(LOG)cout << "STA" << endl;
-	//Poll Controller
-	//if (instrAddr == 0x4016 || instrAddr == 0x4017)
-		//nes->CONTRL.pollController(a,instrAddr-0x4016);
-	//Store A in instrAddr
-	else
-		nes->writeMemory(instrAddr, a);
-	//If writing to a PPU Register, write bottom 5 bits to PPU Reg 0x2002	
-	if ((instrAddr >= 0x2000 && instrAddr <= 0x2007 && instrAddr != 0x2002)){
-		nes->writeMemory(0x2002, *ppuReg2002 & 0b11100000);
-		nes->writeMemory(0x2002, *ppuReg2002 | (a & 0b00011111));
-	}
+	nes->writeMemory(instrAddr, a);
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -1066,39 +1284,27 @@ int cpu::STA(){
 int cpu::STX(){
 	//Log Instruction
 	if(LOG)cout << "STX" << endl;
-	//Poll Controller
-	//if (instrAddr == 0x4016 || instrAddr == 0x4017)
-		//nes->CONTRL.pollController(x,instrAddr-0x4016);
-	//Store X register in instrAddr
-	else
-		nes->writeMemory(instrAddr, x);
-	//If writing to a PPU Register, write bottom 5 bits to PPU Reg 0x2002	
-	if ((instrAddr >= 0x2000 && instrAddr <= 0x2007 && instrAddr != 0x2002)){
-		nes->writeMemory(0x2002, *ppuReg2002 & 0b11100000);
-		nes->writeMemory(0x2002, *ppuReg2002 | (x & 0b00011111));
-	}
+	nes->writeMemory(instrAddr, x);
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
-	
+
 }
 
 //Store Y Register
 int cpu::STY(){
 	//Log Instruction
 	if(LOG)cout << "STY" << endl;
-	//Poll Instruction
-	//if (instrAddr == 0x4016 || instrAddr == 0x4017)
-		//nes->CONTRL.pollController(y,instrAddr-0x4016);
-	//Store Y Register in instrAddr
-	else
-		nes->writeMemory(instrAddr, y);
-	//If writing to a PPU Register, write bottom 5 bits to PPU Reg 0x2002	
-	if ((instrAddr >= 0x2000 && instrAddr <= 0x2007 && instrAddr != 0x2002)){
-		nes->writeMemory(0x2002, *ppuReg2002 & 0b11100000);
-		nes->writeMemory(0x2002, *ppuReg2002 | (y & 0b00011111));
-	}
+	nes->writeMemory(instrAddr, y);
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
-
+//
 //Transfer Accumulator to X
 int cpu::TAX(){
 	//Log Instruction
@@ -1111,6 +1317,10 @@ int cpu::TAX(){
 	//Set Zero flag
 	if (x == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -1126,6 +1336,10 @@ int cpu::TAY(){
 	//Set Zero flag
 	if (y == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -1133,7 +1347,7 @@ int cpu::TAY(){
 int cpu::TSX(){
 	//Log Instruction
 	if(LOG)cout << "TSX" << endl;
-	//Set X equal to S 
+	//Set X equal to S
 	x = s;
 	//Set Negative flag to MSB of X register
 	p &= ~P_NEGATIVE;
@@ -1141,6 +1355,10 @@ int cpu::TSX(){
 	//Set Zero flag
 	if (x == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -1156,6 +1374,10 @@ int cpu::TXA(){
 	//Set Zero flag
 	if (a == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -1164,6 +1386,10 @@ int cpu::TXS(){
 	//Log Instruction
 	if(LOG)cout << "TXS" << endl;
 	s = x;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }
 
@@ -1179,5 +1405,9 @@ int cpu::TYA(){
 	//Set Zero flag
 	if (a == 0) p |= P_ZERO;
 	else p &= ~P_ZERO;
+
+	//Poll for interrupts
+	PollInterrupts();
+
 	return 0;
 }

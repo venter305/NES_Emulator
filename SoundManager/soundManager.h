@@ -11,6 +11,8 @@ class SoundManager {
 		pa_mainloop_api *mainloop_api = NULL;
 		static pa_stream *stream;
 
+		static std::string name;
+
 		static int bufSize;
 		static uint8_t *soundBuf;
 		static int outBufIndex;
@@ -21,10 +23,10 @@ class SoundManager {
 		static int samplesNeeded;
 		static bool running;
 
-		SoundManager();
+		SoundManager(std::string _name);
 		~SoundManager();
-		
-		static uint8_t (*UserFunc)();
+
+		static uint16_t (*UserFunc)();
 
 		void clock();
 

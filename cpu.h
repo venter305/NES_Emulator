@@ -1,7 +1,7 @@
-#ifndef CPU_H_
-#define CPU_H_
+#pragma once
 
 #include <vector>
+#include <fstream>
 
 class NES;
 
@@ -11,38 +11,46 @@ class cpu{
 		int (cpu::*addrMode)();
 		int cycles;
 	};
-	
-	
-	uint8_t	P_CARRY =  0b00000001,
-					P_ZERO =   0b00000010,
-					P_IRQ =    0b00000100,
-					P_DECIMAL= 0b00001000,
-					P_B1 =     0b00010000,
-					P_B2 =     0b00100000,
-					P_OVERFLOW=0b01000000,
-					P_NEGATIVE=0b10000000;
+
+
+	enum {
+		P_CARRY =  0b00000001,
+		P_ZERO =   0b00000010,
+		P_IRQ =    0b00000100,
+		P_DECIMAL= 0b00001000,
+		P_B1 =     0b00010000,
+		P_B2 =     0b00100000,
+		P_OVERFLOW=0b01000000,
+		P_NEGATIVE=0b10000000
+	};
+
 	public:
 		//Registors
 		uint8_t a,x,y,s,p;
 		uint16_t pc;
-	
+
 		NES *nes;
 		int cycles;
-		int numCycles;
-		bool vBlank;
+		int extraCycles;
 		std::vector<instruction> opcodes;
+
 		cpu();
-		
+
 		int instrAddr;
 		int instrVal;
-		int instrIndex;
-		int tmpPC;
-		int instrMode;
-		int *ppuReg2000;
-		int *ppuReg2002;
-		
-		//Address modes
+		bool irqFlag;
+		//bool irqDelay;
+		//bool irqForce;
+		//bool nmiFlag;
+		bool nmiLine;
+		bool previousNMILine;
+
 		int runInstructions();
+		bool PollInterrupts();
+
+		void SaveState(std::ofstream &file);
+		void LoadState(std::ifstream &file);
+		//Address modes
 		int acc();
 		int abs();
 		int absX();
@@ -58,7 +66,7 @@ class cpu{
 		int zpgY();
 
 		//Instructions
-		void IRQ();
+		bool IRQ();
 		void NMI();
 		void reset();
 		int ADC();
@@ -117,7 +125,5 @@ class cpu{
 		int TXA();
 		int TXS();
 		int TYA();
-	
-};
 
-#endif
+};

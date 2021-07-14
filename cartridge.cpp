@@ -10,7 +10,7 @@ cartridge::cartridge(){
 	//Init
 	chrMemory = 0;
 	prgMemory = 0;
-	Mapper = 0;
+	mapper = 0;
 	ntMirrorMode = 1;
 }
 
@@ -18,7 +18,7 @@ cartridge::~cartridge(){
 	saveGame();
 	delete[] prgMemory;
 	delete[] chrMemory;
-	delete Mapper;
+	delete mapper;
 }
 
 //Reset Cartridge
@@ -26,8 +26,8 @@ void cartridge::reset() {
 	saveGame();
 	delete[] prgMemory;
 	delete[] chrMemory;
-	delete Mapper;
-	ntMirrorMode = 1;
+	delete mapper;
+	readRom(path);
 };
 
 //Read a Rom from a file
@@ -39,7 +39,9 @@ bool cartridge::readRom(string fileName){
 	if (!rom)
 		return false;
 
-	name = fileName;
+	path = fileName;
+
+	name = fileName.substr(fileName.find('/')+1);
 
 	//Read Header
 	uint8_t tmp[16];
@@ -56,16 +58,26 @@ bool cartridge::readRom(string fileName){
 	//Load Mapper
 	switch(header.lMAPPER +(header.hMAPPER*0x10)){
 		case 0:
-			Mapper = new mapper_000(header.sPRGROM,header.sCHRROM);
+			mapper = new Mapper_000(header.sPRGROM,header.sCHRROM);
 			break;
 		case 1:
-			Mapper = new mapper_001(header.sPRGROM,header.sCHRROM);
-			Mapper->prgRAM = header.PRGRAM;
+			mapper = new Mapper_001(header.sPRGROM,header.sCHRROM);
+			mapper->prgRAM = header.PRGRAM;
 			break;
 		case 2:
-			Mapper = new mapper_002(header.sPRGROM,header.sCHRROM);
+			mapper = new Mapper_002(header.sPRGROM,header.sCHRROM);
 			break;
+		case 4:
+			mapper = new Mapper_004(header.sPRGROM,header.sCHRROM);
+			break;
+	  default:
+			mapper = nullptr;
+			std::cout << "Mapper " << (header.lMAPPER +(header.hMAPPER*0x10)) << " Not Supported" << std::endl;
+			return false;
 	}
+
+	if (header.PRGRAM)
+		mapper->prgRAM = true;
 
 	//Load PRG ROM
 	int prg_rom = 0;
@@ -104,42 +116,55 @@ bool cartridge::readRom(string fileName){
 
 	loadGame();
 
+	rom.close();
+
 	return true;
 }
 
 //Write to cartridge
 void cartridge::cartWrite(int addr,int value){
-	int wAddr = 0;
 	//Write to CHR ROM/RAM
 	if (addr <= 0x1FFF){
-		wAddr = Mapper->ppuWrite(addr,value);
-		chrMemory[wAddr] = value;
+		chrMemory[mapper->PpuWrite(addr,value)] = value;
 	}
 	//Write to PRG ROM
 	else {
-		wAddr = Mapper->write(addr,value);
+		int wAddr = mapper->Write(addr,value);
 		if (wAddr != -1)
 			prgMemory[wAddr] = value;
 
 	}
 }
 
+int cartridge::PeekPrgMem(int addr){
+	return prgMemory[mapper->PeekPrgAddr(addr)];
+}
+
 //Read from PRG ROM
 int cartridge::readPrgMem(int addr){
-	return prgMemory[Mapper->getPrgAddr(addr)];
+	return prgMemory[mapper->GetPrgAddr(addr)];
+}
+
+int cartridge::PeekChrMem(int addr){
+	return chrMemory[mapper->PeekChrAddr(addr)];
 }
 
 //Read from CHR ROM/RAM
 int cartridge::readChrMem(int addr){
-	return chrMemory[Mapper->getChrAddr(addr)];
+	return chrMemory[mapper->GetChrAddr(addr)];
 }
 
 //Read Mirroring Mode
 int cartridge::getMirrorMode(){
-	if (Mapper->getNtMirrorMode() != -1)
-		ntMirrorMode = Mapper->getNtMirrorMode();
+	if (mapper->GetNtMirrorMode() != -1)
+		ntMirrorMode = mapper->GetNtMirrorMode();
 
 	return ntMirrorMode;
+}
+
+//Check Interrupts
+bool cartridge::PollInterrupts(){
+	return mapper->PollInterrupts();
 }
 
 //Write the save data to a file
@@ -186,4 +211,20 @@ void cartridge::loadGame(){
 
 	saveFile.close();
 
+}
+
+void cartridge::SaveState(std::ofstream &file){
+	file.write(reinterpret_cast<char*>(&header.data[0]),16);
+	file.write(reinterpret_cast<char*>(&prgMemory[0]),prg_size*sizeof(int));
+	file.write(reinterpret_cast<char*>(&chrMemory[0]),chr_size*sizeof(int));
+	file.write(reinterpret_cast<char*>(&ntMirrorMode),1);
+	mapper->SaveMapState(file);
+}
+
+void cartridge::LoadState(std::ifstream &file){
+	file.read(reinterpret_cast<char*>(&header.data[0]),16);
+	file.read(reinterpret_cast<char*>(&prgMemory[0]),prg_size*sizeof(int));
+	file.read(reinterpret_cast<char*>(&chrMemory[0]),chr_size*sizeof(int));
+	file.read(reinterpret_cast<char*>(&ntMirrorMode),1);
+	mapper->LoadMapState(file);
 }

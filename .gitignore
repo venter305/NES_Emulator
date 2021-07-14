@@ -3,3 +3,5 @@
 emu
 Roms/*.nes
 Roms/*.NES
+Saves/*.sav
+SaveStates/*

@@ -1,27 +1,33 @@
-#ifndef MAPPER
-#define MAPPER
+#pragma once
 
 #include <fstream>
 
-class mapper{
+class Mapper{
 	public:
 
 		int numPrgBanks;
 		int numChrBanks;
 
 		bool prgRAM = false;
-		
-		mapper(int,int);
-		//read
-		virtual int getPrgAddr(int addr) = 0;
-		virtual int getChrAddr(int addr) = 0;
-		//write
-		virtual int write(int addr, int value) = 0;
-		virtual int ppuWrite(int addr, int value) = 0;
-		virtual int getNtMirrorMode() = 0;
-		//Save/Load
-		virtual void saveMapState(std::ofstream *file,char *x) = 0;
-		virtual void loadMapState(std::ifstream *file,char *x) = 0;
-};
 
-#endif
+		Mapper(int prgBanks, int chrBanks){
+				numPrgBanks = prgBanks;
+				numChrBanks = chrBanks;
+		}
+
+		//Clock
+		virtual void Clock(){}
+		//read
+		virtual int GetPrgAddr(int addr) = 0;
+		virtual int GetChrAddr(int addr) = 0;
+		virtual int PeekPrgAddr(int addr){return GetPrgAddr(addr);}
+		virtual int PeekChrAddr(int addr){return GetChrAddr(addr);}
+		//write
+		virtual int Write(int addr, int value) = 0;
+		virtual int PpuWrite(int addr, int value) = 0;
+		virtual int GetNtMirrorMode() = 0;
+		virtual bool PollInterrupts(){return false;}
+		//Save/Load
+		virtual void SaveMapState(std::ofstream &file) = 0;
+		virtual void LoadMapState(std::ifstream &file) = 0;
+};

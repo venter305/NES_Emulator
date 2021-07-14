@@ -1,20 +1,31 @@
-#ifndef MAPPER_000_
-#define MAPPER_000_
+#pragma once
+
 #include "mapper.h"
 
-class mapper_000 : public mapper{
-	
-	public:
-	mapper_000(int,int);
-	
-	int getPrgAddr(int) override;
-	int getChrAddr(int) override;
-	int write(int,int) override;
-	int ppuWrite(int,int) override;
-	int getNtMirrorMode() override;
-	void saveMapState(std::ofstream*,char*) override;
-	void loadMapState(std::ifstream*,char*) override;
-	
-};
+class Mapper_000 : public Mapper{
 
-#endif
+	public:
+		Mapper_000(int prgBanks, int chrBanks): Mapper(prgBanks,chrBanks){}
+
+		int GetPrgAddr(int addr) override {
+			int mAddr = addr;
+			//Choose 16k or 32k mapping
+			if (addr >= 0x8000){
+				return (numPrgBanks==1)?(addr%0x4000):(addr-0x8000);
+			}
+			return addr;
+		}
+
+		int GetChrAddr(int addr) override {return addr;}
+		int Write(int addr,int value) override {return 0;}
+		int PpuWrite(int addr,int value) override {return addr;}
+		int GetNtMirrorMode() override {return -1;}
+		void SaveMapState(std::ofstream &file) override {
+			file.write(reinterpret_cast<char*>(&numPrgBanks),sizeof(int));
+			file.write(reinterpret_cast<char*>(&numChrBanks),sizeof(int));
+		}
+		void LoadMapState(std::ifstream &file) override {
+			file.read(reinterpret_cast<char*>(&numPrgBanks),sizeof(int));
+			file.read(reinterpret_cast<char*>(&numChrBanks),sizeof(int));
+		}
+};

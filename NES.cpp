@@ -26,22 +26,28 @@ NES::~NES(){
 
 //Reset Emulator
 void NES::reset(){
+
+	dTime = 0;
+	//Reset components
+	CART.reset();
+	PPU.Reset();
+	APU.reset();
+	CPU.reset();
+
 	//Reset memory to 0
 	for (int i=0;i<0x10000;i++){
 		memory[i] = 0;
 	}
-
-	dTime = 0;
-
-	//Reset components
-	PPU.Reset();
-	APU.reset();
-	CART.reset();
-	CPU.reset();
 }
 
 bool NES::clock(int cycles){
 	if (CPU.pc == debugBreakAddr){
+		return false;
+	}
+
+	if (needReset){
+		reset();
+		needReset = false;
 		return false;
 	}
 
@@ -201,15 +207,11 @@ void NES::writeMemory(int addr, int value){
 			writeMemory(0x2002, memory[0x2002] | (value & 0b00011111));
 		}
 
-		// if (mAddr == 0x2001)
-		// 	std::cout << value << ' ' << PPU.scanlines << ' ' << PPU.cycles << std::endl;
 		//PPU Control
 	  if (mAddr == 0x2000){
 			PPU.nmiOutput = value&0b10000000;
 			PPU.t &= 0xF3FF;
 			PPU.t |= ((value & 3)<<10);
-			//if (!(value&0x08))std::cin.get();
-			//std::cout << std::dec << PPU.scanlines << ' ' << std::hex << value << std::endl;
 		}
 
 		//OAM Data
@@ -295,7 +297,6 @@ void NES::writeMemory(int addr, int value){
 				//cout << APU.pulse1.lenCounter << endl;
 				p->timer = (p->timer&0xFF) + ((value&0x7)*0x100);
 				p->freq = 1789773  / (16 * (double)(p->timer+1));
-				//cout << APU.pulse1.timer << endl;
 				if (p->enabled){
 					p->lenCounter = APU.lenCounterLookup[(value&0xF8)>>3];
 				}

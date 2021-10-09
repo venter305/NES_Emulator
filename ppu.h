@@ -86,6 +86,11 @@ class ppu{
 			{0,0,0},
 			{0,0,0}
 		};
+
+		unsigned char lookup[16] = {
+			0x0, 0x8, 0x4, 0xc, 0x2, 0xa, 0x6, 0xe,
+			0x1, 0x9, 0x5, 0xd, 0x3, 0xb, 0x7, 0xf, };
+
 		GLubyte pixelVal[240][256][3];
 
 		//PPU internal registers
@@ -110,7 +115,7 @@ class ppu{
 		int sCount[8];
 		int numSprites;
 		//int sMask;
-		bool s0Hit;
+		int firstSpriteOAMAddr = 0;
 
 		int bgTile;
 		int attrByte;
@@ -125,6 +130,8 @@ class ppu{
 	void DrawChars(int num,uint8_t *buffer,bool grayscale = false);
 	void DrawPixel();
 	void Clock(int);
+
+	void EvaluateSprites();
 
 	void SaveState(std::ofstream &file);
 	void LoadState(std::ifstream &file);

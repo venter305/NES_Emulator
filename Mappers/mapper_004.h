@@ -58,20 +58,23 @@ public:
   int currentClock = 0;
 
   Mapper_004(int prgBanks,int chrBanks):Mapper(prgBanks,chrBanks){}
+  ~Mapper_004() = default;
 
   void Clock(){
     currentClock++;
   }
 
   int GetPrgAddr(int addr){
-    int ramOffset = 0x2000*prgRAM;
+    int ramOffset = 0x2000;
     //RAM
     if (addr >= 0x6000 && addr <= 0x7FFF)
       return addr-0x6000;
 
     if (addr >= 0x8000 && addr <= 0x9FFF){
-      if (!prgBankMode)
-        return ((addr-0x8000)+0x2000*prgBank1)+ramOffset; // swapable
+      if (!prgBankMode){
+        // std::cout << std::hex << addr << ' ' << prgBank1 << ' ' << ((addr-0x8000)+0x2000*prgBank1)+ramOffset << std::endl; // swapable
+        return ((addr-0x8000)+0x2000*prgBank1)+ramOffset;
+      }
       //fixed to second to last bank
       return ((addr-0x8000)+0x2000*(numPrgBanks*2-2))+ramOffset;
     }
@@ -149,13 +152,15 @@ public:
       if (a12NumCyclesDown > 3){
         if (irqCounter == 0 || irqReload){
           irqCounter = irqReloadVal;
-          irqReload = false;
         }
         else
           irqCounter--;
 
+        std::cout << irqCounter << std::endl;
+
         if (irqCounter == 0 && irqEnable)
           irqPending = true;
+        irqReload = false;
       }
       a12NumCyclesDown = 0;
     }
@@ -176,8 +181,8 @@ public:
       if (addr%2 == 0){
         currentBank = value&0x07;
 
-        prgBankMode = (bool)value&0x40;
-        chrBankMode = (bool)value&0x80;
+        prgBankMode = (bool)(value&0x40);
+        chrBankMode = (bool)(value&0x80);
       }
       else{
         switch (currentBank){
@@ -223,6 +228,7 @@ public:
     else if (addr >= 0xC000 && addr <= 0xDFFF){
       if (addr%2 == 0){
         irqReloadVal = value;
+        std::cout << value << std::endl;
       }
       else{
         irqReload = true;

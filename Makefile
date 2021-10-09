@@ -16,7 +16,7 @@ INCLUDE=-I./eigen -I/usr/include/freetype2
 
 LFLAGS=-lGLEW -lglfw -lGL -lfreetype -lpulse-simple -lpulse
 
-CXXFLAGS= $(LFLAGS) $(INCLUDE)
+CXXFLAGS= $(LFLAGS) $(INCLUDE) -O2
 
 emu: $(OBJ)
 	g++ $(OBJ) -o emu $(CXXFLAGS)

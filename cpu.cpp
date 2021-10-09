@@ -51,7 +51,6 @@ int cpu::runInstructions(){
 		//Log Instruction
 		if (cycles == 0){
 			if(LOG)cout << hex << pc << " A:"<< (int)a << " X:" << (int)x << " Y:" << (int)y << " sp:" << (int)s  << ' ' << nes->peekMemory(0x0100+s+1) << dec << " PPU Cycles:"<< nes->PPU.cycles << " PPU Scanline:" << nes->PPU.scanlines << " PPU Frames:" << nes->PPU.frames <<" p:" << bitset <8> (p) << ' ';
-
 			extraCycles = 0;
 
 			//Load instruction value
@@ -153,7 +152,7 @@ bool cpu::IRQ(){
 			return false;
 	}
 
-	//std::cout << "Scanlines: " << nes->PPU.scanlines << std::endl;
+	std::cout << "Scanlines: " << nes->PPU.scanlines << ' ' << nes->PPU.cycles << std::endl;
 
 	//Push PC to stack
 	nes->writeMemory(0x0100+s, pc/256);
@@ -227,6 +226,7 @@ int cpu::absX(){
 	int x1 = nes->readMemory(pc++);
 	int x2 = nes->readMemory(pc++);
 	instrAddr = (x2*256)+x1+x;
+	instrAddr %= 0x10000;
 	instrVal = -1;
 	if (x1+x > 0xFF)
 		return 1;
@@ -1271,7 +1271,7 @@ int cpu::SEI(){
 //Store Accumulator
 int cpu::STA(){
 	//Log Instruction
-	if(LOG)cout << "STA" << endl;
+	if(LOG)cout << "STA " << hex << instrAddr << dec << endl;
 	nes->writeMemory(instrAddr, a);
 
 	//Poll for interrupts

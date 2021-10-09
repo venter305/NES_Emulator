@@ -101,8 +101,8 @@ void apu::clock(int count){
 	//---------------------------Mixer------------------------------------//
 
 			//Linear
-			double pulseOut = 0.00652 *(pulse1.output+pulse2.output);
-			double triangleOut = 0.00851*triangle.output;
+			double pulseOut = 0.00552 *(pulse1.output+pulse2.output);
+			double triangleOut = 0.00751*triangle.output;
 			double noiseOut = 0.00294*noise.output;
 			double dmcOut = 0.00135*dmc.output;
 			output = (pulseOut + triangleOut + noiseOut + dmcOut)*0xFF;

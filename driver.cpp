@@ -1,5 +1,7 @@
 #include <iostream>
 #include "./GraphicsEngine/graphicsEngine.h"
+#include "Enums.h"
+#include "Macros.h"
 #include "NES.h"
 #include "SoundManager/soundManager.h"
 #include "OpenRomWindow.h"
@@ -38,7 +40,7 @@ class MainWindow : public Window{
 				paused = !paused;
 			});
 			menuBar->AddMenuButton("Reset",[&](Button *btn){
-				 n.reset();
+				 n.needReset = true;
 			});
 			menuBar->AddMenuButton("Save State",[&](Button *btn){
 				n.saveState();
@@ -140,7 +142,8 @@ uint16_t soundLoop (){
 	while(!paused && !n.clock(1)){};
 	// if (paused)
 	// 	std::cout << '\r' << n.peekMemory(0x0020) << std::flush;
-	return ((float)n.APU.output/0xFF)*0xFFFF;
+	float tmpOut = (float)n.APU.output*0.75f;
+	return (tmpOut/0xFF)*0xFFFF;
 }
 
 int main(int argc, char** argv) {
@@ -151,7 +154,7 @@ int main(int argc, char** argv) {
 		romName += "Roms/SMB.nes";
 
 	//Read Rom
-	if (!n.CART.readRom(romName)){
+	if (!n.CART.LoadRom(romName)){
 		std::cout << "No Valid Rom" << std::endl;
 		return 0;
 	}
@@ -164,10 +167,10 @@ int main(int argc, char** argv) {
 	//Open Window
 	GraphicsEngine::Init();
 
-	//glfwSwapInterval(0);
+	glfwSwapInterval(0);
 	GraphicsEngine::AddWindow(new MainWindow(APP_WIDTH,APP_HEIGHT,"Nes Emulator"));
 	GraphicsEngine::Run();
-
-	glfwTerminate();
+	//
+	 glfwTerminate();
 	return 0;
 }

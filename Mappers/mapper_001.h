@@ -12,6 +12,17 @@ class Mapper_001: public Mapper{
 		int chrBank0 = 0;
 		int chrBank1 = 0;
 		int prgBank = 0;
+		//Extra bank switching for 512kb prgRom size
+		int prgBank256k = 0;
+
+		enum BOARDTYPE {
+			NONE,
+			SNROM,
+			SOROM,
+			SUROM,
+			SXROM,
+			SZROM
+		} boardType = NONE;
 
 		//Control
 		enum {
@@ -28,27 +39,32 @@ class Mapper_001: public Mapper{
 
 
 		Mapper_001(int prgBanks, int chrBanks): Mapper(prgBanks,chrBanks){}
+		~Mapper_001() = default;
 
 		int GetPrgAddr(int addr) override {
 			//RAM
 			if (addr >= 0x6000 && addr <= 0x7FFF){
 				return addr-0x6000;
 			}
+			int prgBankOffset = (prgBank256k+(prgBank&PRG_BANK))*0x4000;
+			int lastPrgBank = (numPrgBanks > 0x10)?0x10:numPrgBanks;
+			int lastPrgBankOffset = (prgBank256k+(lastPrgBank-1))*0x4000;
+
 			if ((control&CTL_PRGBANK)>>2 <= 1){
 				//32kb bank switching
-				return ((addr-0x8000)+((prgBank&PRG_BANK)*0x4000))+0x2000*(prgRAM);
+				return (addr-0x8000)+prgBankOffset+0x2000;
 			}
 			if ((control&CTL_PRGBANK)>>2 == 2){
 				//fix first bank (0x8000), switch second bank(0xC000)
 				if (addr >= 0x8000 && addr <= 0xBFFF)
 					return (addr-0x8000)+0x2000*(prgRAM);
-				return ((addr-0xC000)+((prgBank&PRG_BANK)*0x4000))+0x2000*(prgRAM);
+				return (addr-0xC000)+prgBankOffset+0x2000;
 			}
 			if ((control&CTL_PRGBANK)>>2 == 3){
 				//fix last bank (0xC000), switch first bank(0x8000)
 				if (addr >= 0x8000 && addr <= 0xBFFF)
-					return ((addr-0x8000)+((prgBank&PRG_BANK)*0x4000))+0x2000*(prgRAM);
-				return ((addr-0xC000)+((numPrgBanks-1)*0x4000))+0x2000*(prgRAM);
+					return (addr-0x8000)+prgBankOffset+0x2000;
+				return (addr-0xC000)+lastPrgBankOffset+0x2000;
 			}
 			return addr;
 		}
@@ -83,12 +99,25 @@ class Mapper_001: public Mapper{
 				int tmpVal = ((shiftReg&0x1e)>>1) + (value&1)*0x10;
 				if (addr >= 0x8000 && addr <= 0x9FFF)
 					control = tmpVal;
-				else if (addr >= 0xA000 && addr <= 0xBFFF)
-					chrBank0 = tmpVal;
-				else if (addr >= 0xC000 && addr <= 0xDFFF)
-					chrBank1 = tmpVal;
-				else if (addr >= 0xE000 && addr <= 0xFFFF)
+				else if (addr >= 0xA000 && addr <= 0xBFFF){
+					if (chrRAM){
+						prgBank256k = tmpVal&0x10;
+						chrBank0 = tmpVal&1;
+					}
+					else
+						chrBank0 = tmpVal;
+				}
+				else if (addr >= 0xC000 && addr <= 0xDFFF){
+					if (chrRAM && control&CTL_CHRBANK){
+						prgBank256k = tmpVal&0x10;
+						chrBank1 = tmpVal&1;
+					}
+					else
+						chrBank1 = tmpVal;
+				}
+				else if (addr >= 0xE000 && addr <= 0xFFFF){
 					prgBank = tmpVal;
+				}
 				shiftReg = 0x10;
 			}
 			//Shift value into shift register

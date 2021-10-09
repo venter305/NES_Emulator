@@ -121,8 +121,9 @@ class Pulse{
         if (sNegate)
           changeP = -1*changeP-(channelNum);
 
+        if (timer+changeP)
+          timer += changeP;
 
-        timer += changeP;
         if (timer > 0x0800)
           timer = 0x0800;
         freq = 1789773  / (16 * (double)(timer+1));

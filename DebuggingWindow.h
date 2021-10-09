@@ -384,7 +384,7 @@ class DebuggingWindow : public Window{
         uint8_t nameTableBuffer3[256*240*3];
         uint8_t nameTableBuffer4[256*240*3];
 
-        if (dTime - elapsedTime > 0.1f){
+        if (dTime - elapsedTime > 0.16f){
           elapsedTime = dTime;
           n.PPU.DrawNametable(0,nameTableBuffer1);
           n.PPU.DrawNametable(1,nameTableBuffer2);

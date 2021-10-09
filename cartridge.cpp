@@ -30,6 +30,23 @@ void cartridge::reset() {
 	readRom(path);
 };
 
+bool cartridge::LoadRom(std::string fileName){
+	ifstream rom;
+	rom.open(fileName);
+
+	if (!rom)
+		return false;
+
+	char tmp[3];
+	rom.read(tmp,3);
+	if (string(tmp).compare("NES"))
+		return false;
+
+	path = fileName;
+	return true;
+
+}
+
 //Read a Rom from a file
 bool cartridge::readRom(string fileName){
 	//File input
@@ -81,11 +98,11 @@ bool cartridge::readRom(string fileName){
 
 	//Load PRG ROM
 	int prg_rom = 0;
-	prg_size = 0x4000*header.sPRGROM+(0x2000*header.PRGRAM);
+	prg_size = 0x4000*header.sPRGROM+(0x2000);
 	prgMemory = new int[prg_size];
 	while (rom && prg_rom < (prg_size)) {
 		char x;
-		if (prg_rom < 0x2000 && header.PRGRAM)
+		if (prg_rom < 0x2000)
 			x = 0;
 		else
 			rom.read(&x,1);
@@ -125,14 +142,15 @@ bool cartridge::readRom(string fileName){
 void cartridge::cartWrite(int addr,int value){
 	//Write to CHR ROM/RAM
 	if (addr <= 0x1FFF){
-		chrMemory[mapper->PpuWrite(addr,value)] = value;
+		int index = mapper->PpuWrite(addr,value);
+		if (header.sCHRROM == 0)
+			chrMemory[index] = value;
 	}
 	//Write to PRG ROM
 	else {
 		int wAddr = mapper->Write(addr,value);
 		if (wAddr != -1)
 			prgMemory[wAddr] = value;
-
 	}
 }
 
@@ -151,7 +169,11 @@ int cartridge::PeekChrMem(int addr){
 
 //Read from CHR ROM/RAM
 int cartridge::readChrMem(int addr){
-	return chrMemory[mapper->GetChrAddr(addr)];
+	int offset = mapper->GetChrAddr(addr);
+	if (offset >= chr_size)
+		offset %= chr_size;
+
+	return chrMemory[offset];
 }
 
 //Read Mirroring Mode

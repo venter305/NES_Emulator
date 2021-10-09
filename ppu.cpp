@@ -2,6 +2,8 @@
 #include <thread>
 #include "ppu.h"
 #include "NES.h"
+#include "Enums.h"
+#include "Macros.h"
 
 using namespace std;
 
@@ -50,7 +52,6 @@ void ppu::Reset(){
 	vBuffer = 0;
 
 	//Flags
-	s0Hit = false;
 	vBlank = false;
 
 	nmiOccured = false;
@@ -106,12 +107,12 @@ void ppu::Clock(int c){
 		if (scanlines == -1){
 			if (cycles == 0){
 				//Reset Sprite 0
-				nes->writeMemory(0x2002, nes->peekMemory(0x2002) & 0b10111111);
+				nes->writeMemory(0x2002, nes->peekMemory(0x2002)&InvertBits_8(SPRITE_ZERO_HIT));
 
 				//Set up Background Registers
 			}
 			//Reload the vertical scroll bits
-			if ((nes->peekMemory(0x2001) & 0x18)){
+			if (nes->peekMemory(0x2001)&(SHOW_SPRITES|SHOW_BACKGROUND)){
 				if (cycles == 257)
 					transferHorizontal();
 				else if (cycles >= 280 && cycles <= 304){
@@ -137,55 +138,7 @@ void ppu::Clock(int c){
 					bgShiftReg8[1] = bgLatch[1]*0xFF;
 
 					//Get next scanline Sprite data
-					numSprites = 0;
-					int spriteSize = (nes->peekMemory(0x2000)&0x20)>>5;
-					int oamAddr = nes->peekMemory(0x2003);
-					//sMask = 0x80;
-					for (int i=oamAddr;i<64;i++){
-						if (i==0)
-							s0Hit = true;
-						int palletTable = ((spriteSize)?OAM[i*4+1]&1 : (nes->peekMemory(0x2000)&8)>>3)*0x1000;
-						int tileOffset = (OAM[i*4])%8;
-						int tileAddr = ((!spriteSize)?OAM[i*4+1]:OAM[i*4+1]&0xFE)*0x10;
-						//lower part of 8x16 sprite
-						if ((OAM[i*4]) >= 8 && spriteSize)
-							tileAddr += 0x10;
-						//flip sprite vertically
-						if (OAM[i*4+2]&0x80){
-							if (spriteSize){
-								if ((OAM[i*4]) >= 8)
-									tileAddr -= 0x10;
-								else
-									tileAddr += 0x10;
-							}
-							tileOffset = 7-tileOffset;
-						}
-						int tmpPlane1 = nes->PPURead(palletTable+tileAddr+(tileOffset));
-						int tmpPlane2 = nes->PPURead(palletTable+tileAddr+8+(tileOffset));
-
-						unsigned char lookup[16] = {
-							0x0, 0x8, 0x4, 0xc, 0x2, 0xa, 0x6, 0xe,
-							0x1, 0x9, 0x5, 0xd, 0x3, 0xb, 0x7, 0xf, };
-
-						//flip sprite horizontally
-						if (OAM[i*4+2]&0x40){
-							tmpPlane1 = (lookup[tmpPlane1&0xf]<<4) | lookup[tmpPlane1>>4];
-							tmpPlane2 = (lookup[tmpPlane2&0xf]<<4) | lookup[tmpPlane2>>4];
-						}
-
-						if (OAM[i*4] <= 0 && (OAM[i*4]+7+(8*spriteSize))>=0){
-							if (numSprites >= 8)
-								break;
-							sShiftReg8_1[numSprites] = tmpPlane1;
-							sShiftReg8_2[numSprites] = tmpPlane2;
-
-							sCount[numSprites] = OAM[i*4+3];
-							sLatch[numSprites] = OAM[i*4+2];
-							numSprites++;
-						}
-					}
-
-					sActiveLatch = 0;
+					EvaluateSprites();
 				}
 			}
 			//Set the OAMADDR to 0
@@ -196,7 +149,7 @@ void ppu::Clock(int c){
 			//std::cout << nes->peekMemory(0x2001) << ' ' << scanlines << std::endl;
 			DrawPixel();
 
-			if ((nes->peekMemory(0x2001) & 0x18)){
+			if ((nes->peekMemory(0x2001) & (SHOW_SPRITES|SHOW_BACKGROUND))){
 				//Rendering cycles
 				//(cycles >= 321 && cycles <= 336) ||
 				if ((cycles >= 321 && cycles <= 336) || (cycles >= 1 && cycles <= 256)) {
@@ -247,72 +200,22 @@ void ppu::Clock(int c){
 					transferHorizontal();
 
 				//Get next scanline Sprite data
-					numSprites = 0;
-					int spriteSize = (nes->peekMemory(0x2000)&0x20)>>5;
-					int oamAddr = nes->peekMemory(0x2003);
-					//sMask = 0x80;
-					for (int i=oamAddr;i<64;i++){
-						if (i==0)
-							s0Hit = true;
-						int palletTable = ((spriteSize)?OAM[i*4+1]&1 : (nes->peekMemory(0x2000)&8)>>3)*0x1000;
-						int tileOffset = ((scanlines+1)-OAM[i*4])%8;
-						int tileAddr = ((!spriteSize)?OAM[i*4+1]:OAM[i*4+1]&0xFE)*0x10;
-						//lower part of 8x16 sprite
-						if (((scanlines+1)-OAM[i*4]) >= 8 && spriteSize)
-							tileAddr += 0x10;
-						//flip sprite vertically
-						if (OAM[i*4+2]&0x80){
-							if (spriteSize){
-								if (((scanlines+1)-OAM[i*4]) >= 8)
-									tileAddr -= 0x10;
-								else
-									tileAddr += 0x10;
-							}
-							tileOffset = 7-tileOffset;
-						}
-						if(tileOffset < 0)tileOffset = 0;
-						int tmpPlane1 = nes->PPURead(palletTable+tileAddr+(tileOffset));
-						int tmpPlane2 = nes->PPURead(palletTable+tileAddr+8+(tileOffset));
-
-						unsigned char lookup[16] = {
-							0x0, 0x8, 0x4, 0xc, 0x2, 0xa, 0x6, 0xe,
-							0x1, 0x9, 0x5, 0xd, 0x3, 0xb, 0x7, 0xf, };
-
-						//flip sprite horizontally
-						if (OAM[i*4+2]&0x40){
-							tmpPlane1 = (lookup[tmpPlane1&0xf]<<4) | lookup[tmpPlane1>>4];
-							tmpPlane2 = (lookup[tmpPlane2&0xf]<<4) | lookup[tmpPlane2>>4];
-						}
-
-						if (OAM[i*4] <= scanlines+1 && (OAM[i*4]+7+(8*spriteSize))>=scanlines+1){
-							if (numSprites >= 8)
-								break;
-							sShiftReg8_1[numSprites] = tmpPlane1;
-							sShiftReg8_2[numSprites] = tmpPlane2;
-
-							sCount[numSprites] = OAM[i*4+3];
-							sLatch[numSprites] = OAM[i*4+2];
-							numSprites++;
-						}
-					}
-
-					sActiveLatch = 0;
+					EvaluateSprites();
 				}
 			}
 		}
 
-		else if (scanlines == 241 && (nes->peekMemory(0x2002) & 0b10000000) == 0 && vBlank == false){
+		else if (scanlines == 241 && (nes->peekMemory(0x2002) & IN_VBLANK) == 0 && vBlank == false){
 			vBlank = true;
-			nes->writeMemory(0x2002, nes->peekMemory(0x2002) | 0b10000000);
+			nes->writeMemory(0x2002, nes->peekMemory(0x2002) | IN_VBLANK);
 			frames++;
 			nmiOccured = true;
 		}
 
 		//Reset Vblank
 		else if (scanlines == 260 && cycles == 340){
-			s0Hit = false;
 			nmiOccured = false;
-			nes->writeMemory(0x2002,nes->peekMemory(0x2002) & 0b01111111);
+			nes->writeMemory(0x2002,nes->peekMemory(0x2002) & InvertBits_8(IN_VBLANK));
 			vBlank = false;
 		}
 
@@ -335,6 +238,69 @@ void ppu::Clock(int c){
 	}
 }
 
+void ppu::EvaluateSprites(){
+	numSprites = 0;
+	bool largeSprites = nes->peekMemory(0x2000)&SPRITE_SIZE;
+	int palletTable = ((nes->peekMemory(0x2000)&SPRITE_PATTERN_TABLE)>>3)*0x1000;
+	int oamAddr = nes->peekMemory(0x2003);
+	firstSpriteOAMAddr = -1;
+	//sMask = 0x80;
+	for (int i=oamAddr;i<64-oamAddr;i++){
+		//oam bytes
+		int sYPos = OAM[i*4];
+		int sTileIndex = OAM[i*4+1];
+		int sAttributes = OAM[i*4+2];
+		int sXPos = OAM[i*4+3];
+
+		int tileAddr = sTileIndex*0x10;
+		int tileOffset = ((scanlines)-sYPos)%8;
+
+		if (largeSprites){
+			palletTable = (sTileIndex&1)*0x1000;
+			tileAddr = (sTileIndex&0xFE)*0x10;
+			//lower part of 8x16 sprite
+			if (scanlines-sYPos >= 8){
+				tileAddr += 0x10;
+			}
+		}
+
+		//flip sprite vertically
+		if (sAttributes&0x80){
+			if (largeSprites){
+				if (scanlines-sYPos >= 8)
+					tileAddr -= 0x10;
+				else
+					tileAddr += 0x10;
+			}
+			tileOffset = 7-tileOffset;
+		}
+
+		if(tileOffset < 0)tileOffset = 0;
+		int tmpPlane1 = nes->PPURead(palletTable+tileAddr+(tileOffset));
+		int tmpPlane2 = nes->PPURead(palletTable+tileAddr+8+(tileOffset));
+
+		//flip sprite horizontally
+		if (sAttributes&0x40){
+			tmpPlane1 = (lookup[tmpPlane1&0xf]<<4) | lookup[tmpPlane1>>4];
+			tmpPlane2 = (lookup[tmpPlane2&0xf]<<4) | lookup[tmpPlane2>>4];
+		}
+
+		if (sYPos <= scanlines && (sYPos+7+(8*largeSprites))>=scanlines){
+			if (numSprites >= 8)
+				break;
+			if (firstSpriteOAMAddr==-1)firstSpriteOAMAddr = i;
+			sShiftReg8_1[numSprites] = tmpPlane1;
+			sShiftReg8_2[numSprites] = tmpPlane2;
+
+			sCount[numSprites] = sXPos;
+			sLatch[numSprites] = sAttributes;
+			numSprites++;
+		}
+	}
+
+	sActiveLatch = 0;
+}
+
 //Draw a Pixel
 void ppu::DrawPixel(){
 	if (cycles >= 1 && cycles <= 256){
@@ -345,7 +311,7 @@ void ppu::DrawPixel(){
 		int bgAttr2 = 0;
 
 		//If background is enabled and left hand side is not hidden
-		if ((nes->peekMemory(0x2001)&0x8) && (((nes->peekMemory(0x2001)&2)) || cycles > 8)){
+		if ((nes->peekMemory(0x2001)&SHOW_BACKGROUND) && ((nes->peekMemory(0x2001)&BACKGROUND_LEFT_COLUMN) || cycles > 8)){
 			bgPlane1 = (bgShiftReg16[0]>>(15-x))&1;
 			bgPlane2 = (bgShiftReg16[1]>>(15-x))&1;
 			bgAttr1 = (bgShiftReg8[0] >> (7-x))&1;
@@ -358,18 +324,18 @@ void ppu::DrawPixel(){
 		int sPlane2 = 0;
 		int sPallet = 0;
 
-		if (nes->peekMemory(0x2001)&0x10)
+		if (nes->peekMemory(0x2001)&SHOW_SPRITES)
 			for (int i=0;i<numSprites;i++){
 				if(sCount[i]-- == 0)
 					sActiveLatch |= (128>>i);
 
 				if (sActiveLatch & (128>>i)){
-					int sTmpPlane1 = (sShiftReg8_1[i] & 0x80)>0;
-					int sTmpPlane2 = (sShiftReg8_2[i] & 0x80)>0 ;
+					bool sTmpPlane1 = (sShiftReg8_1[i] & 0x80)>0;
+					bool sTmpPlane2 = (sShiftReg8_2[i] & 0x80)>0;
 					int sTmpPallet = sLatch[i] & 3;
 					sShiftReg8_1[i]<<=1;
 					sShiftReg8_2[i]<<=1;
-					if (sTmpPlane1|sTmpPlane2 && ((nes->peekMemory(0x2001)&0x4) || cycles > 8)){
+					if (sTmpPlane1|sTmpPlane2 && ((nes->peekMemory(0x2001)&SPRITE_LEFT_COLUMN) || cycles > 8)){
 						if (!(sPlane1|sPlane2)){
 							sNum = i;
 							sPlane1 = sTmpPlane1;
@@ -377,8 +343,8 @@ void ppu::DrawPixel(){
 							sPallet = sTmpPallet;
 						}
 						//sprite zero hit
-						if (bgPlane1|bgPlane2 && s0Hit && i==0 && !(nes->peekMemory(0x2002)&0x40) && cycles < 256){
-							nes->writeMemory(0x2002, nes->peekMemory(0x2002) | 0x40);
+						if (bgPlane1|bgPlane2 && firstSpriteOAMAddr == 0 && i==0 && !(nes->peekMemory(0x2002)&SPRITE_ZERO_HIT)){
+							nes->writeMemory(0x2002, nes->peekMemory(0x2002) | SPRITE_ZERO_HIT);
 						}
 					}
 
@@ -400,34 +366,34 @@ void ppu::DrawPixel(){
 		float redTint = 1;
 		float greenTint = 1;
 		float blueTint = 1;
-		bool grayscale = nes->peekMemory(0x2001)&0x01;
+		bool grayscale = nes->peekMemory(0x2001)&GRAYSCALE;
 		if (grayscale)
 			palletNum &= 0x30;
-		uint8_t colorTintValue = nes->peekMemory(0x2001)&0xE0;
+		uint8_t colorTintValue = nes->peekMemory(0x2001)&(EMPHASIZE_RED|EMPHASIZE_GREEN|EMPHASIZE_BLUE);
 		float attenuationRate = 0.75f;
 		switch(colorTintValue){
-			case 0x20:
+			case EMPHASIZE_RED:
 				greenTint = attenuationRate;
 				blueTint = attenuationRate;
 				break;
-			case 0x40:
+			case EMPHASIZE_GREEN:
 				redTint = attenuationRate;
 				blueTint = attenuationRate;
 				break;
-			case 0x60:
+			case EMPHASIZE_RED|EMPHASIZE_GREEN:
 				blueTint = attenuationRate;
 				break;
-			case 0x80:
+			case EMPHASIZE_BLUE:
 				redTint = attenuationRate;
 				greenTint = attenuationRate;
 				break;
-			case 0xA0:
+			case EMPHASIZE_BLUE|EMPHASIZE_RED:
 				greenTint = attenuationRate;
 				break;
-			case 0xC0:
+			case EMPHASIZE_BLUE|EMPHASIZE_GREEN:
 				redTint = attenuationRate;
 				break;
-			case 0xE0:
+			case EMPHASIZE_RED|EMPHASIZE_GREEN|EMPHASIZE_BLUE:
 				redTint = attenuationRate;
 				greenTint = attenuationRate;
 				blueTint = attenuationRate;
@@ -474,6 +440,7 @@ void ppu::DrawChars(int num,uint8_t *buffer,bool grayscale){
 			for (int x=0;x<8;x++){
 				bool plane1 = nes->PeekPPUMemory(address+y)&(128>>x);
 				bool plane2 = nes->PeekPPUMemory(address+8+y)&(128>>x);
+				// std::cout << nes->CART.chrMemory[0] << std::endl;
 				for (int i=0;i<3;i++){
 					buffer[tileYBase+y*128*3+tileXBase+x*3+i] = colors[plane1*0b01+plane2*0b10][i];
 				}
@@ -499,7 +466,7 @@ void ppu::DrawSprites(uint8_t *buffer){
 			address = (OAM[numTiles*4+1]&1)?0x1000:0x0000;
 		}
 		else
-			address = ((nes->peekMemory(0x2000)&8)?0x1000:0x0000);
+			address = ((nes->peekMemory(0x2000)&SPRITE_PATTERN_TABLE)?0x1000:0x0000);
 
 		address += index*16;
 		int basePalletAddress = OAM[numTiles*4+2]&3;
@@ -547,7 +514,7 @@ void ppu::DrawNametable(int num,uint8_t *buffer){
 		int colm = numTiles%32;
 		int tileYBase = row*256*3*8;
 		int tileXBase = colm*8*3;
-		int tileAddress = (bool)(nes->peekMemory(0x2000)&0x10) * 0x1000 + nes->PeekPPUMemory(address)*16;
+		int tileAddress = (bool)(nes->peekMemory(0x2000)&BACKGROUND_PATTERN_TABLE) * 0x1000 + nes->PeekPPUMemory(address)*16;
 
 		int attribAddress = 0x23C0 + 0x400*num +(row/4)*8+(colm/4);
 		int attributeX =  (colm%4)/2;
@@ -585,7 +552,7 @@ void ppu::SaveState(std::ofstream &file){
 	file.write(reinterpret_cast<char*>(&t),2);
 	file.write(reinterpret_cast<char*>(&x),1);
 	file.write(reinterpret_cast<char*>(&w),1);
-	file.write(reinterpret_cast<char*>(&s0Hit),1);
+	file.write(reinterpret_cast<char*>(&firstSpriteOAMAddr),sizeof(int));
 	file.write(reinterpret_cast<char*>(&vBlank),1);
 	file.write(reinterpret_cast<char*>(&vBuffer),sizeof(int));
 	file.write(reinterpret_cast<char*>(&nmiOutput),1);
@@ -621,7 +588,7 @@ void ppu::LoadState(std::ifstream &file){
 	file.read(reinterpret_cast<char*>(&t),2);
 	file.read(reinterpret_cast<char*>(&x),1);
 	file.read(reinterpret_cast<char*>(&w),1);
-	file.read(reinterpret_cast<char*>(&s0Hit),1);
+	file.read(reinterpret_cast<char*>(&firstSpriteOAMAddr),sizeof(int));
 	file.read(reinterpret_cast<char*>(&vBlank),1);
 	file.read(reinterpret_cast<char*>(&vBuffer),sizeof(int));
 	file.read(reinterpret_cast<char*>(&nmiOutput),1);

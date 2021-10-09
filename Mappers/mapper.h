@@ -9,11 +9,16 @@ class Mapper{
 		int numChrBanks;
 
 		bool prgRAM = false;
+		bool chrRAM = false;
 
 		Mapper(int prgBanks, int chrBanks){
 				numPrgBanks = prgBanks;
 				numChrBanks = chrBanks;
+				if (chrBanks == 0)
+					chrRAM = true;
 		}
+
+		virtual ~Mapper() = default;
 
 		//Clock
 		virtual void Clock(){}

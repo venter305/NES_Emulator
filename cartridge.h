@@ -78,6 +78,7 @@ class cartridge{
 		cartridge();
 		~cartridge();
 		void reset();
+		bool LoadRom(std::string path);
 		bool readRom(std::string);
 
 		int PeekPrgMem(int);

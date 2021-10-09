@@ -34,6 +34,8 @@ class NES{
 		int debugBreakAddr = -1;
 		bool debugBreak = false;
 
+		bool needReset = false;
+
 		NES();
 		~NES();
 		void reset();

@@ -6,12 +6,12 @@ class Mapper_000 : public Mapper{
 
 	public:
 		Mapper_000(int prgBanks, int chrBanks): Mapper(prgBanks,chrBanks){}
+		~Mapper_000() = default;
 
 		int GetPrgAddr(int addr) override {
-			int mAddr = addr;
 			//Choose 16k or 32k mapping
 			if (addr >= 0x8000){
-				return (numPrgBanks==1)?(addr%0x4000):(addr-0x8000);
+				return ((numPrgBanks==1)?(addr%0x4000):(addr-0x8000))+0x2000;
 			}
 			return addr;
 		}

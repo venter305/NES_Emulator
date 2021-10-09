@@ -7,12 +7,13 @@ class Mapper_002: public Mapper{
 		int prgBank = 0;
 
 		Mapper_002(int prgBanks, int chrBanks): Mapper(prgBanks,chrBanks){}
+		~Mapper_002() = default;
 		int GetPrgAddr(int addr) override {
 			//Lower bank
 			if (addr >= 0x8000 && addr <= 0xBFFF)
-				return ((addr-0x8000)+((prgBank&0xF)*0x4000));
+				return ((addr-0x8000)+((prgBank&0xF)*0x4000))+0x2000;
 			//Upper bank, fixed to last bank
-			return ((addr-0xC000)+((numPrgBanks-1)*0x4000));
+			return ((addr-0xC000)+((numPrgBanks-1)*0x4000))+0x2000;
 		}
 
 		int GetChrAddr(int addr) override {return addr;}

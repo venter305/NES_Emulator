@@ -40,7 +40,7 @@ void ppu::Reset(){
 	}
 
 	//Counters
-	cycles = 30;
+	cycles = 27;
 	scanlines = 0;
 	frames = 1;
 
@@ -152,7 +152,7 @@ void ppu::Clock(int c){
 			if ((nes->peekMemory(0x2001) & (SHOW_SPRITES|SHOW_BACKGROUND))){
 				//Rendering cycles
 				//(cycles >= 321 && cycles <= 336) ||
-				if ((cycles >= 321 && cycles <= 336) || (cycles >= 1 && cycles <= 256)) {
+				if ((cycles >= 321 && cycles <= 336) || (cycles >= 1 && cycles < 256)) {
 					//Every 8 cycles
 					switch((cycles-1)%8){
 						//Load Background registers
@@ -190,11 +190,11 @@ void ppu::Clock(int c){
 							break;
 					}
 					//Increment vertical position in v
-					if (cycles == 256){
+					if (cycles == 255){
 						incrementY();
 					}
 				}
-				else if (cycles == 257){
+				else if (cycles == 256){
 					//Copy horizontal bits from t to v
 					nes->writeMemory(0x2003, 0);
 					transferHorizontal();
@@ -205,13 +205,12 @@ void ppu::Clock(int c){
 			}
 		}
 
-		else if (scanlines == 241 && (nes->peekMemory(0x2002) & IN_VBLANK) == 0 && vBlank == false){
+		if (scanlines == 241 && cycles == 0 && (nes->peekMemory(0x2002) & IN_VBLANK) == 0 && vBlank == false){
 			vBlank = true;
 			nes->writeMemory(0x2002, nes->peekMemory(0x2002) | IN_VBLANK);
 			frames++;
 			nmiOccured = true;
 		}
-
 		//Reset Vblank
 		else if (scanlines == 260 && cycles == 340){
 			nmiOccured = false;
@@ -227,10 +226,15 @@ void ppu::Clock(int c){
 		//Increment scanline
 		if (cycles >= 340){
 			cycles = -1;
-			if (scanlines < 260)
+			if (scanlines < 260){
 				scanlines++;
-			else
+		 	}
+			else{
 				scanlines = -1;
+				// if ((frames%2) && (nes->peekMemory(0x2001) & (SHOW_BACKGROUND|SHOW_SPRITES)))
+				// 	cycles = 0;
+			}
+			//std::cout << "Scanlines: " << scanlines << std::endl;
 		}
 
 
@@ -239,6 +243,7 @@ void ppu::Clock(int c){
 }
 
 void ppu::EvaluateSprites(){
+//	std::cout << "Sprite Evaluation" << std::endl;
 	numSprites = 0;
 	bool largeSprites = nes->peekMemory(0x2000)&SPRITE_SIZE;
 	int palletTable = ((nes->peekMemory(0x2000)&SPRITE_PATTERN_TABLE)>>3)*0x1000;

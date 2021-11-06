@@ -8,8 +8,9 @@ class NES;
 class cpu{
 	struct instruction {
 		int (cpu::*opcode)();
-		int (cpu::*addrMode)();
+		int (cpu::*addrMode)(bool);
 		int cycles;
+		bool dummyRead = false;
 	};
 
 
@@ -31,6 +32,9 @@ class cpu{
 
 		NES *nes;
 		int cycles;
+		unsigned int cycleCount;
+		unsigned int currentInstrCycle;
+		int instr;
 		int extraCycles;
 		std::vector<instruction> opcodes;
 
@@ -45,25 +49,26 @@ class cpu{
 		bool nmiLine;
 		bool previousNMILine;
 
+		void IncCpuCycle();
 		int runInstructions();
 		bool PollInterrupts();
 
 		void SaveState(std::ofstream &file);
 		void LoadState(std::ifstream &file);
 		//Address modes
-		int acc();
-		int abs();
-		int absX();
-		int absY();
-		int imm();
-		int impl();
-		int ind();
-		int indX();
-		int indY();
-		int rel();
-		int zpg();
-		int zpgX();
-		int zpgY();
+		int acc(bool dummyRead = false);
+		int abs(bool dummyRead = false);
+		int absX(bool dummyRead = false);
+		int absY(bool dummyRead = false);
+		int imm(bool dummyRead = false);
+		int impl(bool dummyRead = false);
+		int ind(bool dummyRead = false);
+		int indX(bool dummyRead = false);
+		int indY(bool dummyRead = false);
+		int rel(bool dummyRead = false);
+		int zpg(bool dummyRead = false);
+		int zpgX(bool dummyRead = false);
+		int zpgY(bool dummyRead = false);
 
 		//Instructions
 		bool IRQ();

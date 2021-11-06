@@ -17,8 +17,6 @@ class NES{
 		controller CONTRL;
 		cartridge CART;
 
-		GLFWwindow *window;
-
 		int cpuTmpCycles = 0;
 		int apuTmpCycles = 0;
 
@@ -32,6 +30,7 @@ class NES{
 		float runSpeed = 1;
 
 		int debugBreakAddr = -1;
+		int prevDebugBreakAddr = -1;
 		bool debugBreak = false;
 
 		bool needReset = false;

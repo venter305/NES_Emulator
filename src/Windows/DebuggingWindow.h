@@ -116,7 +116,8 @@ class DebuggingWindow : public Window{
 
       std::shared_ptr<Button> breakBtn = std::make_shared<Button>(0,0,50,20,[&](Button *btn){
         auto breakAddrInput = guiMan.GetElement<TextInput>(TAB1+21);
-        n.debugBreakAddr = std::stoi(breakAddrInput->text->text,NULL,16);
+          n.debugBreakAddr = std::stoi(breakAddrInput->text->text,NULL,16);
+
       });
       breakBtn->setText("Break");
       breakBtn->setBackgroundColor(0.9f,0.9f,0.9f);
@@ -124,6 +125,7 @@ class DebuggingWindow : public Window{
 
       std::shared_ptr<Button> continueBtn = std::make_shared<Button>(0,0,75,20,[&](Button *btn){
         n.debugBreakAddr = -1;
+        n.debugBreak = false;
       });
       continueBtn->setText("Continue");
       continueBtn->setBackgroundColor(0.9f,0.9f,0.9f);
@@ -204,6 +206,19 @@ class DebuggingWindow : public Window{
       std::shared_ptr<Text> scanlines = std::make_shared<Text>(200,10,20,"Scanlines: 0");
       scanlines->setTextColor(0.8f,0.8f,0.8f);
       guiMan.addElement(scanlines,TAB2+22);
+
+      std::shared_ptr<Text> cycles = std::make_shared<Text>(350,10,20,"Cycles: 0");
+      cycles->setTextColor(0.8f,0.8f,0.8f);
+      guiMan.addElement(cycles,TAB2+23);
+
+      std::shared_ptr<Text> vram = std::make_shared<Text>(450,10,20,"vRam: 0");
+      vram->setTextColor(0.8f,0.8f,0.8f);
+      guiMan.addElement(vram,TAB2+24);
+
+      std::shared_ptr<Text> frames = std::make_shared<Text>(450,30,20,"Frames: 0");
+      frames->setTextColor(0.8f,0.8f,0.8f);
+      guiMan.addElement(frames,TAB2+25);
+
 
 
       //APU
@@ -403,6 +418,15 @@ class DebuggingWindow : public Window{
 
         auto scanlines = guiMan.GetElement<Text>(TAB2+22);
         scanlines->setText("Scanlines: " + std::to_string(n.PPU.scanlines));
+
+        auto cycles = guiMan.GetElement<Text>(TAB2+23);
+        cycles->setText("Cycles: " + std::to_string(n.PPU.cycles));
+
+        auto vRam = guiMan.GetElement<Text>(TAB2+24);
+        vRam->setText("vRam: " + std::to_string(n.PPU.v));
+
+        auto frames = guiMan.GetElement<Text>(TAB2+25);
+        frames->setText("Frames: " + std::to_string(n.PPU.frames));
       }
       else if (tab == 3){
         auto p1Enabled = guiMan.GetElement<Text>(TAB3+2);

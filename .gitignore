@@ -1,7 +1,5 @@
-*.o
-*.d
+obj/
 emu
-Roms/*.nes
-Roms/*.NES
+Roms/*
 Saves/*.sav
 SaveStates/*

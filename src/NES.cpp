@@ -55,10 +55,10 @@ bool NES::clock(int cycles){
 		int extraCycles = 0;
 		if (cpuTmpCycles % 3 == 0){
 			extraCycles = CPU.runInstructions();
-			CART.mapper->Clock();
-			APU.clock(1);
+			// CART.mapper->Clock();
+			 //APU.clock(1);
 		}
-		PPU.Clock(1);
+		//PPU.Clock(1);
 		cpuTmpCycles++;
 
 		dTime += 1.0/(ppuClockTime*runSpeed);
@@ -250,6 +250,7 @@ void NES::writeMemory(int addr, int value){
 				PPU.w = 0;
 				//clock mmc3 mapper
 				CART.readChrMem(PPU.v);
+				//std::cout << "Scanlines: " << dec << PPU.scanlines << " T:" << hex << PPU.t << std::endl;
 			}
 		}
 		//PPU Data
@@ -262,16 +263,24 @@ void NES::writeMemory(int addr, int value){
 			//clock mmc3 mapper
 			CART.readChrMem(PPU.v);
 		}
+
 		//OAM DMA
 		else if (mAddr == 0x4014){
 			int oamAddr = memory[0x2003];
+			if (CPU.currentInstrCycle%2){
+				PPU.Clock(3);
+				CPU.cycleCount++;
+			}
+			PPU.Clock(3);
+			CPU.cycleCount++;
 			for (int i=0;i<256;i++){
 				int index = oamAddr+i;
 				if (index >= 256)
 					index = index%256;
 				PPU.OAM[index] = memory[(value*256)+i];
+				CPU.cycleCount += 2;
+				PPU.Clock(2*3);
 			}
-			//PPU.Clock(513*3);
 		}
 
 		//Pulse
